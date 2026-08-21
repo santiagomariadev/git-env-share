@@ -1,0 +1,26 @@
+{
+  "name": "git-env-share",
+  "version": "1.0.0",
+  "description": "Node CLI tool for configuring git hooks to share env files securely",
+  "main": "scripts/setup.js",
+  "bin": {
+    "git-env-share-precommit": "./bin/pre-commit.js",
+    "git-env-share-smudge": "./bin/smudge.js",
+    "git-env-share-generate-key": "./bin/generate-key.js",
+    "git-env-share-add-key": "./bin/add-key.js"
+
+  },
+  "scripts": {
+    "postinstall": "node ./scripts/setup.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/santiagomariadev/git-env-share.git"
+  },
+  "author": "Santiago Jose Maria (santiagomariadev@gmail.com)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/santiagomariadev/git-env-share/issues"
+  },
+  "homepage": "https://github.com/santiagomariadev/git-env-share#readme"
+}
