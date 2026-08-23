@@ -4,25 +4,41 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const askQuestion = require('../utils/askQuestion');
 
-function generateKey() {
+function ensureSecureKeyLocation(keyDir, keyPath) {
+  if (!fs.existsSync(keyDir)) {
+    fs.mkdirSync(keyDir, { recursive: true });
+  }
+
+  fs.chmodSync(keyDir, 0o700);
+
+  if (fs.existsSync(keyPath)) {
+    fs.chmodSync(keyPath, 0o600);
+  }
+}
+
+async function generateKey() {
   const keyDir = path.join(os.homedir(), '.age');
   const keyPath = path.join(keyDir, 'key.txt');
 
   try {
-    // Ensure ~/.age directory exists
-    if (!fs.existsSync(keyDir)) {
-      fs.mkdirSync(keyDir, { recursive: true });
-    }
+    ensureSecureKeyLocation(keyDir, keyPath);
 
     if (!fs.existsSync(keyPath)) {
+      const answer = await askQuestion('No Age private key was found in ~/.age/key.txt. Generate one now?');
+      if (!answer) {
+        console.log('Key generation cancelled.');
+        return;
+      }
+
       execSync(`age-keygen -o "${keyPath}" 2>/dev/null`);
+      fs.chmodSync(keyPath, 0o600);
       console.log(`✓ Generated private key at: ${keyPath}`);
     } else {
       console.warn(`𝑖 Existing keypair found at: ${keyPath}`);
     }
 
-    // Extract public key
     const publicKey = execSync(`age-keygen -y "${keyPath}"`, { encoding: 'utf-8' }).trim();
 
     console.log('\n======================================================');
@@ -30,7 +46,6 @@ function generateKey() {
     console.log(`\n${publicKey}\n`);
     console.log('======================================================\n');
 
-    // Copy to clipboard
     try {
       if (process.platform === 'darwin') {
         execSync(`echo "${publicKey}" | pbcopy`);
@@ -45,7 +60,6 @@ function generateKey() {
     } catch (clipErr) {
       // Ignore clipboard errors if utilities like xclip are not installed
     }
-
   } catch (err) {
     console.error('✕ Failed to generate age keypair. Make sure "age" CLI is installed.');
     process.exit(1);

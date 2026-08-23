@@ -4,6 +4,7 @@ const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const askQuestion = require('../utils/askQuestion');
 
 function readPublicKeyFromStdIn(query) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -20,7 +21,6 @@ async function addKeyAndReencrypt() {
     const rootDir = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
     const recipientsPath = path.join(rootDir, '.agerecipients');
 
-    // Get Public Key from argument or prompt
     let pubKey = process.argv[2];
     if (!pubKey) {
       pubKey = await readPublicKeyFromStdIn('Enter the new member\'s public key (age1...):\n');
@@ -31,7 +31,6 @@ async function addKeyAndReencrypt() {
       process.exit(1);
     }
 
-    // Read existing .agerecipients or create one
     let recipientsContent = fs.existsSync(recipientsPath)
       ? fs.readFileSync(recipientsPath, 'utf-8')
       : '';
@@ -44,8 +43,22 @@ async function addKeyAndReencrypt() {
       console.log('✓ Added key to .agerecipients file.');
     }
 
-    // Re-encrypt all local target files using the updated recipient list
     const envFiles = execSync('ls .env* 2>/dev/null || true', { encoding: 'utf-8' }).split('\n').filter(Boolean);
+    const fileCount = envFiles.length;
+
+    if (fileCount === 0) {
+      console.log('No .env files were found to re-encrypt. Only .agerecipients was updated.');
+      execSync(`git add "${recipientsPath}"`);
+      return;
+    }
+
+    console.log(`\nThis will re-encrypt ${fileCount} environment file(s) and stage the updated .secret files.`);
+    const shouldProceed = await askQuestion('Do you want to continue with the re-encryption?');
+    if (!shouldProceed) {
+      console.log('Re-encryption cancelled. The new key was added to .agerecipients, but no files were rewritten.');
+      return;
+    }
+
     let count = 0;
 
     for (const relativeEnvPath of envFiles) {
@@ -74,12 +87,10 @@ async function addKeyAndReencrypt() {
       }
     }
 
-    // Stage .agerecipients file
     execSync(`git add "${recipientsPath}"`);
 
     console.log(`\n✓ Successfully re-encrypted ${count} secret file(s) and staged .agerecipients!`);
     console.log('> Run "git commit -m \"security: add new team member age key\"" to complete onboarding.');
-
   } catch (err) {
     console.error('✕ Error executing add-key:', err.message);
     process.exit(1);
