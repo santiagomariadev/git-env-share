@@ -5,17 +5,11 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const askQuestion = require('../utils/askQuestion');
+const { ensureSecureDirectory, ensureSecureFile } = require('../utils/files');
 
 function ensureSecureKeyLocation(keyDir, keyPath) {
-  if (!fs.existsSync(keyDir)) {
-    fs.mkdirSync(keyDir, { recursive: true });
-  }
-
-  fs.chmodSync(keyDir, 0o700);
-
-  if (fs.existsSync(keyPath)) {
-    fs.chmodSync(keyPath, 0o600);
-  }
+  ensureSecureDirectory(keyDir);
+  ensureSecureFile(keyPath);
 }
 
 async function generateKey() {

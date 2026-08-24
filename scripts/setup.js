@@ -1,30 +1,17 @@
 #!/usr/bin/env node
 const { execSync } = require('child_process');
-const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const askQuestion = require('../utils/askQuestion');
-
-function ensureSecureDirectory(dirPath) {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-
-  fs.chmodSync(dirPath, 0o700);
-}
-
-function ensureSecureFile(filePath) {
-  if (fs.existsSync(filePath)) {
-    fs.chmodSync(filePath, 0o600);
-  }
-}
+const { ensureSecureDirectory, ensureSecureFile } = require('../utils/files');
+const { getGitHooksDir, getGitRoot } = require('../utils/git');
+const { loadGitEnvShareConfig, resolvePrivateKeyPath } = require('../config');
 
 function getDirectories() {
-  const gitDir = execSync('git rev-parse --git-dir', { encoding: 'utf-8' }).trim();
-  const gitHooksDir = execSync('git rev-parse --git-path hooks', { encoding: 'utf-8' }).trim();
-  const rootDir = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+  const gitHooksDir = getGitHooksDir();
+  const rootDir = getGitRoot();
 
-  if (!fs.existsSync(gitDir) || !fs.existsSync(rootDir)) {
+  if (!fs.existsSync(rootDir)) {
     throw new Error('Not a Git repository. Please run this script inside a Git repository.');
   }
 
@@ -109,9 +96,21 @@ function configureGitAgeScripts(rootDir) {
 }
 
 async function generateAgeKeyPair(recipientsPath) {
-  const keyDir = path.join(os.homedir(), '.age');
-  const keyPath = path.join(keyDir, 'key.txt');
+  const rootDir = process.cwd();
+  const config = loadGitEnvShareConfig(rootDir);
+  const keyPath = resolvePrivateKeyPath(config, rootDir);
 
+  if (config.mode === 'ssh') {
+    if (fs.existsSync(keyPath)) {
+      console.log(`✓ SSH private key already exists at ${keyPath}`);
+      return;
+    }
+
+    console.log(`\n🔑 SSH mode enabled. Ensure your private key exists at ${keyPath} and that your GitHub public key is authorized by the repository admin.`);
+    return;
+  }
+
+  const keyDir = path.dirname(keyPath);
   ensureSecureDirectory(keyDir);
 
   if (fs.existsSync(keyPath)) {
@@ -120,11 +119,11 @@ async function generateAgeKeyPair(recipientsPath) {
     return;
   }
 
-  console.log('\n🔑 No Age keypair detected at ~/.age/key.txt');
+  console.log(`\n🔑 No Age keypair detected at ${keyPath}`);
   const answer = await askQuestion('Generate a new Age keypair now?');
 
   if (!answer) {
-    console.log('⚠ Skipping key generation. You will need to create ~/.age/key.txt manually before pulling/decrypting.');
+    console.log(`⚠ Skipping key generation. You will need to create ${keyPath} manually before pulling/decrypting.`);
     return;
   }
 
@@ -159,6 +158,10 @@ async function setup() {
     await confirmSetup();
     configureGitHooks(gitHooksDir);
     const recipientsPath = configureGitAgeScripts(rootDir);
+    const config = loadGitEnvShareConfig(rootDir);
+    if (config.mode === 'ssh') {
+      console.log('✓ SSH mode is enabled. The project will expect GitHub SSH recipients to be listed in .agerecipients.');
+    }
     await generateAgeKeyPair(recipientsPath);
 
     console.log('\n✅ git-env-share is configured.');
