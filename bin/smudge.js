@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 const { spawnSync } = require('child_process');
 const path = require('path');
-const os = require('os');
 const fs = require('fs');
+const { loadGitEnvShareConfig, resolvePrivateKeyPath } = require('../config');
 
 function runSmudge() {
   const secretFilePath = process.argv[2]; // Passed via %f
-  const keyPath = path.join(os.homedir(), '.age', 'key.txt');
+  const projectRoot = process.cwd();
+  const config = loadGitEnvShareConfig(projectRoot);
+  const keyPath = resolvePrivateKeyPath(config, projectRoot);
 
   if (!fs.existsSync(keyPath)) {
     console.error(`✕ Private key missing at ${keyPath}`);
+    console.error(`Update your ${config.mode === 'ssh' ? 'SSH' : 'age'} key setting in the project config or run the matching key-generation command.`);
     process.exit(1);
   }
 
@@ -21,7 +24,10 @@ function runSmudge() {
 
   if (ageProcess.status !== 0) {
     console.error('✕ Decryption failed.');
-    console.error(`Run "npx git-env-share-generate-key" to generate your age keypair and share the public key with your repository admin.`)
+    const guidanceMessage = config.mode === 'ssh'
+      ? 'Ensure your SSH private key matches the GitHub public key authorized for this repository.'
+      : 'Run "npx git-env-share-generate-key" to generate your age keypair and share the public key with your repository admin.';
+    console.error(guidanceMessage);
     process.exit(1);
   }
 

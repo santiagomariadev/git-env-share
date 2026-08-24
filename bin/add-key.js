@@ -5,6 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
 const askQuestion = require('../utils/askQuestion');
+const { loadGitEnvShareConfig } = require('../config');
+const { addGitHubUser } = require('../utils/sshEnvEncryption');
 
 function readPublicKeyFromStdIn(query) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -19,14 +21,35 @@ function readPublicKeyFromStdIn(query) {
 async function addKeyAndReencrypt() {
   try {
     const rootDir = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
-    const recipientsPath = path.join(rootDir, '.agerecipients');
+    const config = loadGitEnvShareConfig(rootDir);
+    const recipientsPath = path.join(rootDir, config.recipientsFile || '.agerecipients');
 
     let pubKey = process.argv[2];
+    const isSshMode = config.mode === 'ssh';
+
     if (!pubKey) {
-      pubKey = await readPublicKeyFromStdIn('Enter the new member\'s public key (age1...):\n');
+      if (isSshMode) {
+        pubKey = await readPublicKeyFromStdIn('Enter the GitHub username to authorize for this repo:\n');
+      } else {
+        pubKey = await readPublicKeyFromStdIn('Enter the new member\'s public key (age1...):\n');
+      }
     }
 
-    if (!pubKey.startsWith('age1')) {
+    if (isSshMode) {
+      if (pubKey.startsWith('ssh-') || pubKey.startsWith('age1')) {
+        // Accept an already-assembled recipient line, as well as age keys in mixed setups.
+        if (!pubKey.startsWith('age1') && !pubKey.startsWith('ssh-')) {
+          console.error('✕ Invalid SSH recipient format. Expected a GitHub username, ssh-... recipient, or age1 key.');
+          process.exit(1);
+        }
+      } else {
+        const addedKeys = await addGitHubUser(pubKey, { recipientsPath });
+        if (addedKeys && addedKeys.length > 0) {
+          console.log(`✓ Added ${addedKeys.length} GitHub SSH key(s) for @${pubKey} to ${recipientsPath}`);
+        }
+        return;
+      }
+    } else if (!pubKey.startsWith('age1')) {
       console.error('✕ Invalid public key format. Age public keys must start with "age1".');
       process.exit(1);
     }
@@ -90,7 +113,7 @@ async function addKeyAndReencrypt() {
     execSync(`git add "${recipientsPath}"`);
 
     console.log(`\n✓ Successfully re-encrypted ${count} secret file(s) and staged .agerecipients!`);
-    console.log('> Run "git commit -m \"security: add new team member age key\"" to complete onboarding.');
+    console.log('> Run "git commit -m \"security: add new team member key\"" to complete onboarding.');
   } catch (err) {
     console.error('✕ Error executing add-key:', err.message);
     process.exit(1);

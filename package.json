@@ -10,7 +10,9 @@
     "git-env-share-generate-key": "./bin/generate-key.js",
     "git-env-share-add-key": "./bin/add-key.js"
   },
-  "scripts": {},
+  "scripts": {
+    "test": "node --test"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/santiagomariadev/git-env-share.git"

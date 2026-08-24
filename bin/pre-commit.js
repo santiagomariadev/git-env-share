@@ -3,11 +3,8 @@
 const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-
-function getRemoteGitUrl() {
-  const remoteUrl = execSync('git config --get remote.origin.url || echo ""', { encoding: 'utf-8' }).trim();
-  return remoteUrl.length > 0 ? remoteUrl : null;
-}
+const { loadGitEnvShareConfig } = require('../config');
+const { getRemoteGitUrl, gitAdd, gitResetPaths, gitRestoreStaged } = require('../utils/git');
 
 function verifyGitAccess() {
   // Get the remote URL of the Git repository
@@ -36,11 +33,12 @@ function verifyGitAccess() {
 }
 
 function validateAgeRecipients(rootDir) {
-  const recipientsPath = path.join(rootDir, '.agerecipients');
+  const config = loadGitEnvShareConfig(rootDir);
+  const recipientsPath = path.join(rootDir, config.recipientsFile || '.agerecipients');
 
   if (!fs.existsSync(recipientsPath)) {
-    console.error('✕ Error: Missing .agerecipients file in repository root.');
-    process.exit(1);
+    fs.writeFileSync(recipientsPath, '# Add age or SSH public keys (one per line)\n');
+    console.log('✓ Created recipients file for the configured mode:', config.mode);
   }
 
   return recipientsPath;
@@ -73,8 +71,8 @@ function getEnvFilesAndUpdateGitIgnore() {
     console.log('✓ Updated .gitignore with missing .env files.');
   }
 
-  execSync(`git reset "${envFiles.join('" "')}" 2>/dev/null || true`);
-  execSync(`git add "${gitIgnorePath}"`);
+  gitResetPaths(envFiles);
+  gitAdd(gitIgnorePath);
 
   return envFiles;
 }
@@ -112,15 +110,11 @@ function secureEnvFile(rootDir, envFilePath, recipientsPath) {
     fs.writeFileSync(secretFilePath, ageProcess.stdout);
 
     // Unstage the raw .env file if it was staged by accident
-    try {
-      execSync(`git restore --staged "${envFilePath}" 2>/dev/null`);
-      console.log(`✓ Unstaged raw file: ${envFilePath}`);
-    } catch (e) {
-      // File wasn't staged; ignore error
-    }
+    gitRestoreStaged(envFilePath);
+    console.log(`✓ Unstaged raw file: ${envFilePath}`);
 
     // Stage the encrypted secret file and updated .gitignore
-    execSync(`git add "${relativeSecretPath}" ".gitignore"`);
+    gitAdd(relativeSecretPath, '.gitignore');
     console.log(`✓ Encrypted & Staged: ${relativeSecretPath}`);
   }
 }
