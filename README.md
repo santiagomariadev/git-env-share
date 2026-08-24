@@ -1,7 +1,31 @@
 # git-shared-envs
 
-A Node.js package for securily share environment configurations in-repo.
-Transparent, asymmetric file encryption (`age`) with automated Git hooks and SSH access checks for your sensitive files (`.env`).
+A TypeScript-first Node.js package for securely sharing environment files in a repository.
+It uses transparent asymmetric encryption (`age`) with Git hooks and optional SSH recipient validation for sensitive files like `.env`.
+
+## Why this package is useful
+
+- Safe to install as a dev dependency in team repos
+- Encrypts `.env` files before commit
+- Restores decrypted local files on pull/checkouts
+- Works with either `age` or SSH-based recipient authorization
+- Exposes a small typed API for config-aware tooling
+
+## TypeScript usage
+
+The package exports a typed API for JavaScript and TypeScript consumers:
+
+```ts
+import {
+  loadGitEnvShareConfig,
+  resolvePrivateKeyPath,
+  type GitEnvShareConfig
+} from 'git-shared-envs';
+
+const config: GitEnvShareConfig = loadGitEnvShareConfig();
+const keyPath = resolvePrivateKeyPath(config);
+console.log(config.mode, keyPath);
+```
 
 ## Prerequisites
 

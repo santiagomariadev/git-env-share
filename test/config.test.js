@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const { loadGitEnvShareConfig, resolvePrivateKeyPath } = require('../config');
+const { loadGitEnvShareConfig, resolvePrivateKeyPath } = require('../dist/config');
 
 test('reads config from package.json with age as default', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-package-'));
