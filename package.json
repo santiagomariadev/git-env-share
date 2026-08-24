@@ -2,16 +2,26 @@
   "name": "git-env-share",
   "version": "1.0.0",
   "description": "Node CLI tool for configuring git hooks to share env files securely",
-  "main": "scripts/setup.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
-    "git-env-share-init": "./bin/init.js",
-    "git-env-share-precommit": "./bin/pre-commit.js",
-    "git-env-share-smudge": "./bin/smudge.js",
-    "git-env-share-generate-key": "./bin/generate-key.js",
-    "git-env-share-add-key": "./bin/add-key.js"
+    "git-env-share-init": "./dist/bin/init.js",
+    "git-env-share-precommit": "./dist/bin/pre-commit.js",
+    "git-env-share-smudge": "./dist/bin/smudge.js",
+    "git-env-share-generate-key": "./dist/bin/generate-key.js",
+    "git-env-share-add-key": "./dist/bin/add-key.js"
   },
   "scripts": {
-    "test": "node --test"
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build",
+    "test": "npm run build && node --test test/*.test.js"
   },
   "repository": {
     "type": "git",
@@ -24,12 +34,14 @@
   },
   "homepage": "https://github.com/santiagomariadev/git-env-share#readme",
   "files": [
-    "bin",
-    "scripts",
-    "utils",
+    "dist",
     "README.md"
   ],
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.3"
   }
 }
