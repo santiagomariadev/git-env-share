@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import askQuestion from '../utils/askQuestion';
+import { askBooleanQuestion } from '../utils/askQuestion';
 import { ensureSecureDirectory, ensureSecureFile } from '../utils/files';
 
 function ensureSecureKeyLocation(keyDir: string, keyPath: string) {
@@ -19,7 +19,7 @@ async function generateKey() {
     ensureSecureKeyLocation(keyDir, keyPath);
 
     if (!fs.existsSync(keyPath)) {
-      const answer = await askQuestion('No Age private key was found in ~/.age/key.txt. Generate one now?');
+      const answer = await askBooleanQuestion('No Age private key was found in ~/.age/key.txt. Generate one now?');
       if (!answer) {
         console.log('Key generation cancelled.');
         return;

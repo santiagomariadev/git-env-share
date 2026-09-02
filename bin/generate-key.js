@@ -4,7 +4,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const askQuestion = require('../utils/askQuestion');
+const { askBooleanQuestion } = require('../utils/askQuestion');
 const { ensureSecureDirectory, ensureSecureFile } = require('../utils/files');
 
 function ensureSecureKeyLocation(keyDir, keyPath) {
@@ -20,7 +20,7 @@ async function generateKey() {
     ensureSecureKeyLocation(keyDir, keyPath);
 
     if (!fs.existsSync(keyPath)) {
-      const answer = await askQuestion('No Age private key was found in ~/.age/key.txt. Generate one now?');
+      const answer = await askBooleanQuestion('No Age private key was found in ~/.age/key.txt. Generate one now?');
       if (!answer) {
         console.log('Key generation cancelled.');
         return;

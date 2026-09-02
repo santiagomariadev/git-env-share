@@ -10,6 +10,33 @@ function normalizeArray(value: unknown): string[] {
   return [];
 }
 
+export function hasExplicitConfig(projectRoot = process.cwd()): boolean {
+  const rootDir = projectRoot || process.cwd();
+  const packageJsonPath = path.join(rootDir, 'package.json');
+  const configFilePath = path.join(rootDir, '.git-env-share.config');
+
+  if (!fs.existsSync(packageJsonPath) && !fs.existsSync(configFilePath)) {
+    return false;
+  }
+
+  if (fs.existsSync(packageJsonPath)) {
+    const pkg = readJsonFile(packageJsonPath) || {};
+    const packageConfig = pkg['git-env-share'] || pkg.gitEnvShare || {};
+    if (packageConfig && typeof packageConfig === 'object' && Object.keys(packageConfig).length > 0) {
+      return true;
+    }
+  }
+
+  if (fs.existsSync(configFilePath)) {
+    const fileConfig = readJsonFile(configFilePath) || {};
+    if (fileConfig && typeof fileConfig === 'object' && Object.keys(fileConfig).length > 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function loadGitEnvShareConfig(projectRoot = process.cwd()): GitEnvShareConfig {
   const rootDir = projectRoot || process.cwd();
   const packageJsonPath = path.join(rootDir, 'package.json');

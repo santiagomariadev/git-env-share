@@ -2,7 +2,7 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const askQuestion = require('../utils/askQuestion');
+const { askBooleanQuestion } = require('../utils/askQuestion');
 const { ensureSecureDirectory, ensureSecureFile } = require('../utils/files');
 const { getGitHooksDir, getGitRoot } = require('../utils/git');
 const { loadGitEnvShareConfig, resolvePrivateKeyPath } = require('../config');
@@ -25,7 +25,7 @@ async function confirmSetup() {
   console.log('\n🔐 git-env-share setup');
   console.log('This will update your Git config, add a .secret filter, create or update .agerecipients and .gitattributes, and install a pre-commit hook.');
 
-  const answer = await askQuestion('Do you want to continue with the setup?');
+  const answer = await askBooleanQuestion('Do you want to continue with the setup?');
   if (!answer) {
     console.log('Setup cancelled. No repository files were modified.');
     process.exit(0);
@@ -50,7 +50,7 @@ function configureGitHooks(gitHooksDir) {
   }
 
   console.log('⚠ A pre-commit hook already exists in this repository.');
-  const answer = askQuestion('Append git-env-share to the existing hook and keep the current hook behavior?');
+  const answer = askBooleanQuestion('Append git-env-share to the existing hook and keep the current hook behavior?');
 
   if (!answer) {
     console.log('Skipped hook installation to avoid modifying the existing pre-commit hook.');
@@ -120,7 +120,7 @@ async function generateAgeKeyPair(recipientsPath) {
   }
 
   console.log(`\n🔑 No Age keypair detected at ${keyPath}`);
-  const answer = await askQuestion('Generate a new Age keypair now?');
+  const answer = await askBooleanQuestion('Generate a new Age keypair now?');
 
   if (!answer) {
     console.log(`⚠ Skipping key generation. You will need to create ${keyPath} manually before pulling/decrypting.`);
@@ -140,7 +140,7 @@ async function generateAgeKeyPair(recipientsPath) {
       : '';
 
     if (!recipientsContent.includes(pubKeyOutput)) {
-      const shouldAdd = await askQuestion('Add this public key to .agerecipients so the repo can encrypt files for you?');
+      const shouldAdd = await askBooleanQuestion('Add this public key to .agerecipients so the repo can encrypt files for you?');
       if (shouldAdd) {
         fs.appendFileSync(recipientsPath, `\n# Added automatically during setup\n${pubKeyOutput}\n`);
         console.log('✓ Added public key to project .agerecipients file.');
