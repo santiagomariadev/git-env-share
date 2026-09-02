@@ -3,7 +3,7 @@ import { execSync, spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
-import askQuestion from '../utils/askQuestion';
+import { askBooleanQuestion } from '../utils/askQuestion';
 import { loadGitEnvShareConfig } from '../config';
 import { addGitHubUser } from '../utils/sshEnvEncryption';
 
@@ -74,7 +74,7 @@ async function addKeyAndReencrypt() {
     }
 
     console.log(`\nThis will re-encrypt ${fileCount} environment file(s) and stage the updated .secret files.`);
-    const shouldProceed = await askQuestion('Do you want to continue with the re-encryption?');
+    const shouldProceed = await askBooleanQuestion('Do you want to continue with the re-encryption?');
     if (!shouldProceed) {
       console.log('Re-encryption cancelled. The new key was added to .agerecipients, but no files were rewritten.');
       return;

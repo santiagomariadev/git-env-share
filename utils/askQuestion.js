@@ -1,7 +1,7 @@
 const fs = require('fs');
 const readline = require('readline');
 
-async function askQuestion(query) {
+async function askBooleanQuestion(query) {
   let inputSource = process.stdin;
   
   // Re-attach to the TTY if running inside a non-interactive Git hook environment
@@ -29,4 +29,4 @@ async function askQuestion(query) {
   });
 }
 
-module.exports = askQuestion;
+module.exports = askBooleanQuestion;

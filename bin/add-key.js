@@ -4,7 +4,7 @@ const { execSync, spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
-const askQuestion = require('../utils/askQuestion');
+const { askBooleanQuestion } = require('../utils/askQuestion');
 const { loadGitEnvShareConfig } = require('../config');
 const { addGitHubUser } = require('../utils/sshEnvEncryption');
 
@@ -76,7 +76,7 @@ async function addKeyAndReencrypt() {
     }
 
     console.log(`\nThis will re-encrypt ${fileCount} environment file(s) and stage the updated .secret files.`);
-    const shouldProceed = await askQuestion('Do you want to continue with the re-encryption?');
+    const shouldProceed = await askBooleanQuestion('Do you want to continue with the re-encryption?');
     if (!shouldProceed) {
       console.log('Re-encryption cancelled. The new key was added to .agerecipients, but no files were rewritten.');
       return;

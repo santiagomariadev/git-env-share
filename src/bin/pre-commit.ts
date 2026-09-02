@@ -19,6 +19,12 @@ function verifyGitAccess() {
     'BatchMode=yes',
     remoteUrl.replace(/^(git@|https:\/\/)/, '').replace(/:.*/, '')
   ], { encoding: 'utf-8' });
+
+  if (sshCheck.status === 255) {
+    console.error('✕ Git Access Denied: SSH connection failed. Please check your SSH keys and configuration.');
+    process.exit(1);
+  }
+
   const sshOutput = (sshCheck.stdout || '') + (sshCheck.stderr || '');
 
   if (!sshOutput.includes("You've successfully authenticated")) {

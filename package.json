@@ -13,6 +13,7 @@
   },
   "bin": {
     "git-env-share-init": "./dist/bin/init.js",
+    "git-env-share-reconfigure": "./dist/bin/reconfigure.js",
     "git-env-share-precommit": "./dist/bin/pre-commit.js",
     "git-env-share-smudge": "./dist/bin/smudge.js",
     "git-env-share-generate-key": "./dist/bin/generate-key.js",

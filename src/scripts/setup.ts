@@ -2,10 +2,11 @@
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import askQuestion from '../utils/askQuestion';
+import { askBooleanQuestion } from '../utils/askQuestion';
 import { ensureSecureDirectory, ensureSecureFile } from '../utils/files';
 import { getGitHooksDir, getGitRoot } from '../utils/git';
 import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
+import { syncGitHubRecipientsFromConfig } from '../utils/sshEnvEncryption';
 
 function getDirectories() {
   const gitHooksDir = getGitHooksDir();
@@ -25,14 +26,14 @@ async function confirmSetup() {
   console.log('\n🔐 git-env-share setup');
   console.log('This will update your Git config, add a .secret filter, create or update .agerecipients and .gitattributes, and install a pre-commit hook.');
 
-  const answer = await askQuestion('Do you want to continue with the setup?');
+  const answer = await askBooleanQuestion('Do you want to continue with the setup?');
   if (!answer) {
     console.log('Setup cancelled. No repository files were modified.');
     process.exit(0);
   }
 }
 
-function configureGitHooks(gitHooksDir: string) {
+async function configureGitHooks(gitHooksDir: string) {
   const precommitHookPath = path.join(gitHooksDir, 'pre-commit');
   const hookCommand = 'npx git-env-share-precommit';
   const hookScriptHeader = '#!/bin/sh\n# git-env-share pre-commit hook\n';
@@ -50,7 +51,7 @@ function configureGitHooks(gitHooksDir: string) {
   }
 
   console.log('⚠ A pre-commit hook already exists in this repository.');
-  const answer = askQuestion('Append git-env-share to the existing hook and keep the current hook behavior?');
+  const answer = await askBooleanQuestion('Append git-env-share to the existing hook and keep the current hook behavior?');
 
   if (!answer) {
     console.log('Skipped hook installation to avoid modifying the existing pre-commit hook.');
@@ -67,7 +68,7 @@ function configureGitAgeScripts(rootDir: string) {
   const attributesPath = path.join(rootDir, '.gitattributes');
 
   execSync('git config --local filter.git-age.clean cat');
-  execSync('git config --local filter.git-age.smudge "npx git-env-share-smudge"');
+  execSync('git config --local filter.git-age.smudge "npx git-env-share-smudge %f"');
   execSync('git config --local filter.git-age.required true');
 
   if (!fs.existsSync(recipientsPath)) {
@@ -120,7 +121,7 @@ async function generateAgeKeyPair(recipientsPath: string) {
   }
 
   console.log(`\n🔑 No Age keypair detected at ${keyPath}`);
-  const answer = await askQuestion('Generate a new Age keypair now?');
+  const answer = await askBooleanQuestion('Generate a new Age keypair now?');
 
   if (!answer) {
     console.log(`⚠ Skipping key generation. You will need to create ${keyPath} manually before pulling/decrypting.`);
@@ -140,7 +141,7 @@ async function generateAgeKeyPair(recipientsPath: string) {
       : '';
 
     if (!recipientsContent.includes(pubKeyOutput)) {
-      const shouldAdd = await askQuestion('Add this public key to .agerecipients so the repo can encrypt files for you?');
+      const shouldAdd = await askBooleanQuestion('Add this public key to .agerecipients so the repo can encrypt files for you?');
       if (shouldAdd) {
         fs.appendFileSync(recipientsPath, `\n# Added automatically during setup\n${pubKeyOutput}\n`);
         console.log('✓ Added public key to project .agerecipients file.');
@@ -151,18 +152,26 @@ async function generateAgeKeyPair(recipientsPath: string) {
   }
 }
 
-async function setup() {
+export async function setup() {
   try {
     const { gitHooksDir, rootDir } = getDirectories();
 
     await confirmSetup();
-    configureGitHooks(gitHooksDir);
+    await configureGitHooks(gitHooksDir);
     const recipientsPath = configureGitAgeScripts(rootDir);
     const config = loadGitEnvShareConfig(rootDir);
+
     if (config.mode === 'ssh') {
       console.log('✓ SSH mode is enabled. The project will expect GitHub SSH recipients to be listed in .agerecipients.');
+      const syncedKeys = await syncGitHubRecipientsFromConfig(rootDir);
+      if (syncedKeys.length > 0) {
+        console.log(`✓ Synced ${syncedKeys.length} GitHub SSH key(s) into ${recipientsPath}.`);
+      } else {
+        console.log(`✓ Rebuilt ${recipientsPath} for SSH mode. No GitHub usernames were configured.`);
+      }
+    } else {
+      await generateAgeKeyPair(recipientsPath);
     }
-    await generateAgeKeyPair(recipientsPath);
 
     console.log('\n✅ git-env-share is configured.');
     console.log('Next steps:');
@@ -173,5 +182,3 @@ async function setup() {
     console.log('git-env-share: Not inside a Git repository. Skipping setup.');
   }
 }
-
-void setup();
