@@ -17,7 +17,9 @@
     "git-env-share-precommit": "./dist/bin/pre-commit.js",
     "git-env-share-smudge": "./dist/bin/smudge.js",
     "git-env-share-generate-key": "./dist/bin/generate-key.js",
-    "git-env-share-add-key": "./dist/bin/add-key.js"
+    "git-env-share-add-key": "./dist/bin/add-key.js",
+    "git-env-share-add-ssh-key": "./dist/bin/add-ssh-key.js",
+    "git-env-share-add-github-user": "./dist/bin/add-github-user.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

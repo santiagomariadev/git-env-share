@@ -53,7 +53,8 @@ function getEnvFilesAndUpdateGitIgnore() {
     console.log('✓ Created .gitignore file.');
   }
 
-  const envFiles = execSync('ls .env* 2>/dev/null || true', { encoding: 'utf-8' }).split('\n').filter(Boolean);
+  const ls = spawnSync('sh', ['-c', 'ls .env* 2>/dev/null || true'], { encoding: 'utf-8' });
+  const envFiles = (ls.stdout || '').split('\n').filter(Boolean);
 
   let gitIgnoreContent = fs.readFileSync(gitIgnorePath, 'utf-8');
   let updated = false;
@@ -114,7 +115,7 @@ function secureEnvFile(rootDir: string, envFilePath: string, recipientsPath: str
 
 function runPreCommit() {
   try {
-    const rootDir = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+    const rootDir = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).stdout.trim();
     const gitRemoteUrl = getRemoteGitUrl();
 
     if (!gitRemoteUrl) {

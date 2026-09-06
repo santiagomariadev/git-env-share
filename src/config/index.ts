@@ -37,7 +37,7 @@ export function hasExplicitConfig(projectRoot = process.cwd()): boolean {
   return false;
 }
 
-export function loadGitEnvShareConfig(projectRoot = process.cwd()): GitEnvShareConfig {
+export function loadGitEnvShareConfig(projectRoot = process.cwd(), overrides: Partial<GitEnvShareConfig> = {}): GitEnvShareConfig {
   const rootDir = projectRoot || process.cwd();
   const packageJsonPath = path.join(rootDir, 'package.json');
   const configFilePath = path.join(rootDir, '.git-env-share.config');
@@ -59,6 +59,10 @@ export function loadGitEnvShareConfig(projectRoot = process.cwd()): GitEnvShareC
     }
   }
 
+  if (overrides && typeof overrides === 'object') {
+    Object.assign(config, overrides);
+  }
+
   config.mode = String(config.mode || DEFAULT_CONFIG.mode).toLowerCase();
   if (!VALID_MODES.includes(config.mode as (typeof VALID_MODES)[number])) {
     config.mode = DEFAULT_CONFIG.mode;
@@ -68,6 +72,8 @@ export function loadGitEnvShareConfig(projectRoot = process.cwd()): GitEnvShareC
   config.sshKeyPath = config.sshKeyPath || DEFAULT_CONFIG.sshKeyPath;
   config.githubUsernames = normalizeArray(config.githubUsernames || config.githubUsers || config.githubUser || []);
   config.recipientsFile = config.recipientsFile || DEFAULT_CONFIG.recipientsFile;
+  config.enabled = config.enabled !== false;
+  config.paused = Boolean(config.paused);
 
   return config;
 }

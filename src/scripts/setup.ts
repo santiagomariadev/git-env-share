@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { askBooleanQuestion } from '../utils/askQuestion';
@@ -67,9 +67,9 @@ function configureGitAgeScripts(rootDir: string) {
   const recipientsPath = path.join(rootDir, '.agerecipients');
   const attributesPath = path.join(rootDir, '.gitattributes');
 
-  execSync('git config --local filter.git-age.clean cat');
-  execSync('git config --local filter.git-age.smudge "npx git-env-share-smudge %f"');
-  execSync('git config --local filter.git-age.required true');
+  spawnSync('git', ['config', '--local', 'filter.git-age.clean', 'cat'], { stdio: 'inherit' });
+  spawnSync('git', ['config', '--local', 'filter.git-age.smudge', 'npx git-env-share-smudge %f'], { stdio: 'inherit' });
+  spawnSync('git', ['config', '--local', 'filter.git-age.required', 'true'], { stdio: 'inherit' });
 
   if (!fs.existsSync(recipientsPath)) {
     fs.writeFileSync(recipientsPath, '# Add age public keys (one per line)\n');
@@ -129,11 +129,19 @@ async function generateAgeKeyPair(recipientsPath: string) {
   }
 
   try {
-    execSync(`age-keygen -o "${keyPath}"`);
-    fs.chmodSync(keyPath || '', 0o600);
+    if (!keyPath) {
+      throw new Error('No Age key path could be resolved.');
+    }
+
+    spawnSync('age-keygen', ['-o', keyPath], { stdio: 'inherit' });
+    fs.chmodSync(keyPath, 0o600);
     console.log(`✓ Generated private key at ${keyPath}`);
 
-    const pubKeyOutput = execSync(`age-keygen -y "${keyPath}"`, { encoding: 'utf-8' }).trim();
+    if (!keyPath) {
+      throw new Error('No Age key path could be resolved.');
+    }
+
+    const pubKeyOutput = spawnSync('age-keygen', ['-y', keyPath], { encoding: 'utf-8' }).stdout.trim();
     console.log(`\nYour Public Key: ${pubKeyOutput}`);
 
     const recipientsContent = fs.existsSync(recipientsPath)

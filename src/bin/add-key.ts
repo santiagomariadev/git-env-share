@@ -19,7 +19,7 @@ function readPublicKeyFromStdIn(query: string): Promise<string> {
 
 async function addKeyAndReencrypt() {
   try {
-    const rootDir = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+    const rootDir = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).stdout.trim();
     const config = loadGitEnvShareConfig(rootDir);
     const recipientsPath = path.join(rootDir, config.recipientsFile || '.agerecipients');
 
@@ -28,31 +28,31 @@ async function addKeyAndReencrypt() {
 
     if (!pubKey) {
       if (isSshMode) {
-        pubKey = await readPublicKeyFromStdIn('Enter the GitHub username to authorize for this repo:\n');
+        pubKey = await readPublicKeyFromStdIn('Enter the SSH public key to authorize for this repo (ssh-..., ecdsa-..., or sk-...):\n');
       } else {
-        pubKey = await readPublicKeyFromStdIn("Enter the new member's public key (age1...):\n");
+        pubKey = await readPublicKeyFromStdIn("Enter the new member's age public key (age1...):\n");
       }
     }
 
-    if (isSshMode) {
-      if (pubKey.startsWith('ssh-') || pubKey.startsWith('age1')) {
-        if (!pubKey.startsWith('age1') && !pubKey.startsWith('ssh-')) {
-          console.error('✕ Invalid SSH recipient format. Expected a GitHub username, ssh-... recipient, or age1 key.');
-          process.exit(1);
-        }
-      } else {
-        const addedKeys = await addGitHubUser(pubKey, { recipientsPath });
-        if (addedKeys && addedKeys.length > 0) {
-          console.log(`✓ Added ${addedKeys.length} GitHub SSH key(s) for @${pubKey} to ${recipientsPath}`);
-        }
-        return;
+    if (isSshMode && !pubKey.startsWith('ssh-') && !pubKey.startsWith('ecdsa-') && !pubKey.startsWith('sk-')) {
+      const addedKeys = await addGitHubUser(pubKey, { recipientsPath });
+      if (addedKeys && addedKeys.length > 0) {
+        console.log(`✓ Added ${addedKeys.length} GitHub SSH key(s) for @${pubKey} to ${recipientsPath}`);
       }
-    } else if (!pubKey.startsWith('age1')) {
+      return;
+    }
+
+    if (!isSshMode && !pubKey.startsWith('age1')) {
       console.error('✕ Invalid public key format. Age public keys must start with "age1".');
       process.exit(1);
     }
 
-    let recipientsContent = fs.existsSync(recipientsPath)
+    if (isSshMode && !/^ssh-|^ecdsa-|^sk-/.test(pubKey)) {
+      console.error('✕ Invalid SSH recipient format. Expected a raw SSH public key (ssh-..., ecdsa-..., or sk-...).');
+      process.exit(1);
+    }
+
+    const recipientsContent = fs.existsSync(recipientsPath)
       ? fs.readFileSync(recipientsPath, 'utf-8')
       : '';
 
@@ -64,12 +64,13 @@ async function addKeyAndReencrypt() {
       console.log('✓ Added key to .agerecipients file.');
     }
 
-    const envFiles = execSync('ls .env* 2>/dev/null || true', { encoding: 'utf-8' }).split('\n').filter(Boolean);
+    const envList = spawnSync('sh', ['-c', 'ls .env* 2>/dev/null || true'], { encoding: 'utf-8' });
+    const envFiles = (envList.stdout || '').split('\n').filter(Boolean);
     const fileCount = envFiles.length;
 
     if (fileCount === 0) {
       console.log('No .env files were found to re-encrypt. Only .agerecipients was updated.');
-      execSync(`git add "${recipientsPath}"`);
+      spawnSync('git', ['add', recipientsPath], { stdio: 'inherit' });
       return;
     }
 
@@ -102,13 +103,13 @@ async function addKeyAndReencrypt() {
         }
 
         fs.writeFileSync(secretFilePath, ageProcess.stdout);
-        execSync(`git add "${secretFilePath}"`);
+        spawnSync('git', ['add', secretFilePath], { stdio: 'inherit' });
         console.log(`✓ Re-encrypted & staged: .secret${baseName}`);
         count++;
       }
     }
 
-    execSync(`git add "${recipientsPath}"`);
+    spawnSync('git', ['add', recipientsPath], { stdio: 'inherit' });
 
     console.log(`\n✓ Successfully re-encrypted ${count} secret file(s) and staged .agerecipients!`);
     console.log('> Run "git commit -m "security: add new team member key"" to complete onboarding.');

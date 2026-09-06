@@ -1,12 +1,33 @@
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+
+export function shouldSkipRemoteValidation(remoteUrl: string | null | undefined, config?: { enabled?: boolean; paused?: boolean }): boolean {
+  if (!remoteUrl) return true;
+  if (config && config.enabled === false) return true;
+  if (config && config.paused) return true;
+
+  const normalized = remoteUrl.trim();
+  return normalized.startsWith('http://') || normalized.startsWith('https://') || normalized.startsWith('git://');
+}
+
+function normalizeGitArgs(args: string[] | string): string[] {
+  if (Array.isArray(args)) return args;
+
+  return args.trim().split(/\s+/).filter(Boolean);
+}
 
 export function execGit(args: string[] | string, options: { stdio?: 'pipe' | 'inherit' | 'ignore' | Array<'pipe' | 'inherit' | 'ignore'> } = {}): string {
-  const command = Array.isArray(args) ? args.join(' ') : args;
-  return execSync(`git ${command}`, {
+  const normalizedArgs = normalizeGitArgs(args);
+  const result = spawnSync('git', normalizedArgs, {
     encoding: 'utf-8',
     stdio: options.stdio || 'pipe',
     ...options
-  }) as string;
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  return (result.stdout || '') as string;
 }
 
 export function getGitRoot(): string {

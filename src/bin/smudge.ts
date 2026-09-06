@@ -32,7 +32,7 @@ function runSmudge() {
 
   const decryptedContent = ageProcess.stdout;
 
-  if (secretFilePath) {
+  if (secretFilePath && secretFilePath.startsWith('.secret')) {
     const dir = path.dirname(secretFilePath);
     const envFileName = path.basename(secretFilePath).replace(/^\.secret/, '');
     const envFilePath = path.join(dir, envFileName);

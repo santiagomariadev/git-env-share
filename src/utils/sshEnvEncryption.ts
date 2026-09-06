@@ -1,12 +1,42 @@
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
 
+export function isSshPublicKey(value: string | undefined | null): boolean {
+  const normalized = String(value || '').trim();
+  if (!normalized) return false;
+
+  return /^(ssh-(rsa|ed25519|dss)|ecdsa-[A-Za-z0-9-]+|sk-(ssh-ed25519|ecdsa-sha2-nistp256)@openssh\.com)/.test(normalized);
+}
+
+export function addSshRecipient(publicKey: string, options: { recipientsPath?: string } = {}): string[] {
+  const normalizedKey = String(publicKey || '').trim();
+
+  if (!normalizedKey) {
+    throw new Error('SSH public key is required.');
+  }
+
+  if (!isSshPublicKey(normalizedKey)) {
+    throw new Error('Invalid SSH public key format. Expected ssh-..., ecdsa-..., or sk-... recipient.');
+  }
+
+  const recipientsPath = options.recipientsPath || path.join(process.cwd(), '.agerecipients');
+  const existingContent = fs.existsSync(recipientsPath) ? fs.readFileSync(recipientsPath, 'utf-8') : '';
+
+  if (existingContent.includes(normalizedKey)) {
+    return [];
+  }
+
+  fs.appendFileSync(recipientsPath, `\n# Added on ${new Date().toISOString().split('T')[0]}\n${normalizedKey}\n`);
+  return [normalizedKey];
+}
+
 export function getSshHostFromRemote(): string {
   try {
-    const remoteUrl = execSync('git config --get remote.origin.url', { encoding: 'utf-8' }).trim();
+    const remoteOutput = spawnSync('git', ['config', '--get', 'remote.origin.url'], { encoding: 'utf-8' });
+    const remoteUrl = (remoteOutput.stdout || '').trim();
 
     if (remoteUrl.startsWith('ssh://')) {
       const url = new URL(remoteUrl);
@@ -35,8 +65,8 @@ export function resolveSshKeyPath(projectRoot = process.cwd()): string | null {
   const host = getSshHostFromRemote();
 
   try {
-    const sshOutput = execSync(`ssh -G "${host}" 2>/dev/null`, { encoding: 'utf-8' });
-    const lines = sshOutput.split('\n');
+    const sshOutput = spawnSync('ssh', ['-G', host], { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const lines = (sshOutput.stdout || '').split('\n');
 
     for (const line of lines) {
       if (line.toLowerCase().startsWith('identityfile ')) {
@@ -139,22 +169,13 @@ export async function addGitHubUser(username: string, options: { recipientsPath?
     throw new Error('GitHub username is required.');
   }
 
-  try {
-    const keys = await fetchGitHubPublicKeys(normalizedUsername, { baseUrl: options.baseUrl });
-    const existingContent = fs.existsSync(recipientsPath) ? fs.readFileSync(recipientsPath, 'utf-8') : '';
-    const appended = keys.filter((key) => !existingContent.includes(key));
+  const keys = await fetchGitHubPublicKeys(normalizedUsername, { baseUrl: options.baseUrl });
+  const existingContent = fs.existsSync(recipientsPath) ? fs.readFileSync(recipientsPath, 'utf-8') : '';
+  const appended = keys.filter((key) => !existingContent.includes(key));
 
-    if (appended.length > 0) {
-      fs.appendFileSync(recipientsPath, `\n# GitHub: ${normalizedUsername}\n${appended.join('\n')}\n`);
-    }
-
-    return appended;
-  } catch (error) {
-    throw error;
+  if (appended.length > 0) {
+    fs.appendFileSync(recipientsPath, `\n# GitHub: ${normalizedUsername}\n${appended.join('\n')}\n`);
   }
-}
 
-const username = process.argv[2];
-if (username) {
-  void addGitHubUser(username);
+  return appended;
 }

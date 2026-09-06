@@ -6,6 +6,7 @@ const path = require('node:path');
 
 const { loadGitEnvShareConfig, resolvePrivateKeyPath, hasExplicitConfig } = require('../dist/config');
 const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncryption');
+const { shouldSkipRemoteValidation } = require('../dist/utils/git');
 
 test('reads config from package.json with age as default', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-package-'));
@@ -105,4 +106,18 @@ test('rebuilds .agerecipients from githubUsernames when SSH mode is configured',
   } finally {
     await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
   }
+});
+
+test('skips SSH validation for HTTPS remotes and honors config opt-out', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-remote-'));
+
+  assert.equal(shouldSkipRemoteValidation('https://github.com/example/repo.git'), true);
+  assert.equal(shouldSkipRemoteValidation('git@github.com:example/repo.git'), false);
+
+  const config = loadGitEnvShareConfig(dir);
+  assert.equal(config.enabled, true);
+  assert.equal(config.paused, false);
+
+  const disabledConfig = loadGitEnvShareConfig(dir, { enabled: false });
+  assert.equal(disabledConfig.enabled, false);
 });

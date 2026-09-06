@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -25,14 +25,14 @@ async function generateKey() {
         return;
       }
 
-      execSync(`age-keygen -o "${keyPath}" 2>/dev/null`);
+      spawnSync('age-keygen', ['-o', keyPath], { stdio: 'ignore' });
       fs.chmodSync(keyPath, 0o600);
       console.log(`✓ Generated private key at: ${keyPath}`);
     } else {
       console.warn(`𝑖 Existing keypair found at: ${keyPath}`);
     }
 
-    const publicKey = execSync(`age-keygen -y "${keyPath}"`, { encoding: 'utf-8' }).trim();
+    const publicKey = spawnSync('age-keygen', ['-y', keyPath], { encoding: 'utf-8' }).stdout.trim();
 
     console.log('\n======================================================');
     console.log('🔑 PUBLIC KEY (Share this with your repository admin):');
@@ -41,13 +41,13 @@ async function generateKey() {
 
     try {
       if (process.platform === 'darwin') {
-        execSync(`echo "${publicKey}" | pbcopy`);
+        spawnSync('sh', ['-c', `printf '%s' "${publicKey}" | pbcopy`], { stdio: 'ignore' });
         console.log('📋 Public key copied to clipboard!');
       } else if (process.platform === 'linux') {
-        execSync(`echo "${publicKey}" | xclip -selection clipboard 2>/dev/null || echo "${publicKey}" | xsel -b 2>/dev/null`);
+        spawnSync('sh', ['-c', `printf '%s' "${publicKey}" | xclip -selection clipboard 2>/dev/null || printf '%s' "${publicKey}" | xsel -b 2>/dev/null`], { stdio: 'ignore' });
         console.log('📋 Public key copied to clipboard!');
       } else if (process.platform === 'win32') {
-        execSync(`echo ${publicKey}| clip`);
+        spawnSync('cmd', ['/c', `echo ${publicKey}| clip`], { stdio: 'ignore' });
         console.log('📋 Public key copied to clipboard!');
       }
     } catch {
