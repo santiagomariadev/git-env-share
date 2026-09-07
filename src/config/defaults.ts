@@ -6,6 +6,7 @@ export const DEFAULT_CONFIG: Readonly<{
   recipientsFile: string;
   enabled: boolean;
   paused: boolean;
+  encryptionTrigger: 'stage' | 'commit';
 }> = Object.freeze({
   mode: 'age',
   ageKeyPath: '~/.age/key.txt',
@@ -13,7 +14,8 @@ export const DEFAULT_CONFIG: Readonly<{
   githubUsernames: [],
   recipientsFile: '.agerecipients',
   enabled: true,
-  paused: false
+  paused: false,
+  encryptionTrigger: 'stage'
 });
 
 export const VALID_MODES = Object.freeze(['age', 'ssh'] as const);
@@ -30,5 +32,6 @@ export type GitEnvShareConfig = {
   recipientsFile?: string;
   enabled?: boolean;
   paused?: boolean;
+  encryptionTrigger?: 'stage' | 'commit' | string;
   [key: string]: unknown;
 };

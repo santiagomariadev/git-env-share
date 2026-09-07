@@ -74,6 +74,8 @@ export function loadGitEnvShareConfig(projectRoot = process.cwd(), overrides: Pa
   config.recipientsFile = config.recipientsFile || DEFAULT_CONFIG.recipientsFile;
   config.enabled = config.enabled !== false;
   config.paused = Boolean(config.paused);
+  const rawTrigger = String(config.encryptionTrigger || DEFAULT_CONFIG.encryptionTrigger).toLowerCase();
+  config.encryptionTrigger = rawTrigger === 'commit' ? 'commit' : 'stage';
 
   return config;
 }

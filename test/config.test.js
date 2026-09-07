@@ -3,10 +3,39 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
 const { loadGitEnvShareConfig, resolvePrivateKeyPath, hasExplicitConfig } = require('../dist/config');
 const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncryption');
 const { shouldSkipRemoteValidation } = require('../dist/utils/git');
+
+function runGit(args, cwd) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+function writeFilterScripts(sharedRoot) {
+  const encryptScript = path.join(sharedRoot, 'encrypt-env.sh');
+  const decryptScript = path.join(sharedRoot, 'decrypt-env.sh');
+
+  fs.writeFileSync(encryptScript, '#!/usr/bin/env bash\ninput=$(cat)\nprintf "encrypted:%s" "$input"\n');
+  fs.writeFileSync(decryptScript, '#!/usr/bin/env bash\ninput=$(cat)\nprintf "%s" "${input#encrypted:}"\n');
+
+  fs.chmodSync(encryptScript, 0o755);
+  fs.chmodSync(decryptScript, 0o755);
+
+  return { encryptScript, decryptScript };
+}
+
+function initRepoWithFilter(repoRoot, encryptScript, decryptScript) {
+  runGit(['init', '-b', 'main'], repoRoot);
+  runGit(['config', 'user.name', 'Test User'], repoRoot);
+  runGit(['config', 'user.email', 'test@example.com'], repoRoot);
+  runGit(['config', 'filter.fake-env.clean', `bash ${encryptScript}`], repoRoot);
+  runGit(['config', 'filter.fake-env.smudge', `bash ${decryptScript}`], repoRoot);
+  runGit(['config', 'filter.fake-env.required', 'true'], repoRoot);
+
+  fs.writeFileSync(path.join(repoRoot, '.gitattributes'), '.env filter=fake-env\n');
+}
 
 test('reads config from package.json with age as default', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-package-'));
@@ -117,7 +146,58 @@ test('skips SSH validation for HTTPS remotes and honors config opt-out', () => {
   const config = loadGitEnvShareConfig(dir);
   assert.equal(config.enabled, true);
   assert.equal(config.paused, false);
+  assert.equal(config.encryptionTrigger, 'stage');
 
-  const disabledConfig = loadGitEnvShareConfig(dir, { enabled: false });
+  const disabledConfig = loadGitEnvShareConfig(dir, { enabled: false, encryptionTrigger: 'commit' });
   assert.equal(disabledConfig.enabled, false);
+  assert.equal(disabledConfig.encryptionTrigger, 'commit');
+});
+
+test('applies real Git filter behavior for add, commit, and checkout', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-git-flow-'));
+  const { encryptScript, decryptScript } = writeFilterScripts(root);
+  initRepoWithFilter(root, encryptScript, decryptScript);
+
+  fs.writeFileSync(path.join(root, '.env'), 'SECRET=value\n');
+  runGit(['add', '.env'], root);
+
+  const stagedBlob = runGit(['show', ':.env'], root).trim();
+  assert.match(stagedBlob, /^encrypted:SECRET=value$/);
+
+  runGit(['commit', '-m', 'Add env file'], root);
+  const committedBlob = runGit(['show', 'HEAD:.env'], root).trim();
+  assert.match(committedBlob, /^encrypted:SECRET=value$/);
+
+  fs.writeFileSync(path.join(root, '.env'), 'SECRET=updated\n');
+  runGit(['checkout', '--', '.env'], root);
+
+  assert.equal(fs.readFileSync(path.join(root, '.env'), 'utf8'), 'SECRET=value');
+});
+
+test('pulls updated encrypted content through the same Git filter flow', () => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-pull-flow-'));
+  const originDir = path.join(baseDir, 'origin');
+  const cloneDir = path.join(baseDir, 'clone');
+  const { encryptScript, decryptScript } = writeFilterScripts(baseDir);
+
+  fs.mkdirSync(originDir);
+  initRepoWithFilter(originDir, encryptScript, decryptScript);
+
+  fs.writeFileSync(path.join(originDir, '.env'), 'SECRET=value\n');
+  runGit(['add', '.env'], originDir);
+  runGit(['commit', '-m', 'Initial env'], originDir);
+
+  runGit(['clone', originDir, cloneDir], baseDir);
+  initRepoWithFilter(cloneDir, encryptScript, decryptScript);
+  runGit(['reset', '--hard', 'HEAD'], cloneDir);
+
+  const clonedEnv = fs.readFileSync(path.join(cloneDir, '.env'), 'utf8');
+  assert.equal(clonedEnv, 'SECRET=value');
+
+  fs.writeFileSync(path.join(originDir, '.env'), 'SECRET=updated\n');
+  runGit(['add', '.env'], originDir);
+  runGit(['commit', '-m', 'Update env'], originDir);
+
+  runGit(['pull', '--ff-only', 'origin', 'main'], cloneDir);
+  assert.equal(fs.readFileSync(path.join(cloneDir, '.env'), 'utf8'), 'SECRET=updated');
 });

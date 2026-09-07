@@ -16,25 +16,29 @@ async function promptForConfig(): Promise<void> {
 
   const answer = await askBooleanQuestion('No git-env-share config was found. Would you like to create one now?');
   if (!answer) {
-    console.log('Skipping config creation. You can run git-env-share-init later or add a repo config manually.');
+    console.log('Skipping config creation. You can run git-env-share-init later or add the repo config manually.');
     return;
   }
 
-  const modeAnswer = await askBooleanQuestion('Use SSH mode?');
+  const modeAnswer = await askBooleanQuestion('Use SSH mode instead of age mode?');
   const mode = modeAnswer ? 'ssh' : 'age';
-  const config: GitEnvShareConfig = { mode };
+  const encryptionTriggerAnswer = await askBooleanQuestion('Use commit-time encryption instead of stage-time encryption?');
+  const config: GitEnvShareConfig = {
+    mode,
+    encryptionTrigger: encryptionTriggerAnswer ? 'commit' : 'stage'
+  };
 
   if (mode === 'age') {
     const ageKeyPath = await askQuestion('ageKeyPath (default: ~/.age/key.txt):');
     config.ageKeyPath = ageKeyPath && ageKeyPath.trim() !== '' ? ageKeyPath : '~/.age/key.txt';
-    console.log('Age mode selected. If the key path is left blank, a new keypair will be generated automatically.');
+    console.log('Age mode selected. If you leave the path blank, a new keypair will be generated automatically.');
   } else {
     const sshKeyPath = await askQuestion('sshKeyPath (default: ~/.ssh/id_ed25519):');
     config.sshKeyPath = sshKeyPath && sshKeyPath.trim() !== '' ? sshKeyPath : '~/.ssh/id_ed25519';
 
     const addGitHubUsernames = await askBooleanQuestion('Add GitHub usernames for SSH recipients?');
     if (addGitHubUsernames) {
-      const usernameInput = await askQuestion('Enter GitHub usernames (comma-separated):');
+      const usernameInput = await askQuestion('Enter GitHub usernames, separated by commas:');
 
       const usernames = usernameInput
         .split(',')

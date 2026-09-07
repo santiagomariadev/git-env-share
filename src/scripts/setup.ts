@@ -24,7 +24,7 @@ function getDirectories() {
 
 async function confirmSetup() {
   console.log('\n🔐 git-env-share setup');
-  console.log('This will update your Git config, add a .secret filter, create or update .agerecipients and .gitattributes, and install a pre-commit hook.');
+  console.log('This will configure the Git filter, update .agerecipients and .gitattributes, and optionally install a pre-commit hook.');
 
   const answer = await askBooleanQuestion('Do you want to continue with the setup?');
   if (!answer) {
@@ -163,11 +163,15 @@ async function generateAgeKeyPair(recipientsPath: string) {
 export async function setup() {
   try {
     const { gitHooksDir, rootDir } = getDirectories();
+    const config = loadGitEnvShareConfig(rootDir);
 
     await confirmSetup();
-    await configureGitHooks(gitHooksDir);
+
+    if (config.encryptionTrigger === 'commit') {
+      await configureGitHooks(gitHooksDir);
+    }
+
     const recipientsPath = configureGitAgeScripts(rootDir);
-    const config = loadGitEnvShareConfig(rootDir);
 
     if (config.mode === 'ssh') {
       console.log('✓ SSH mode is enabled. The project will expect GitHub SSH recipients to be listed in .agerecipients.');
@@ -183,9 +187,9 @@ export async function setup() {
 
     console.log('\n✅ git-env-share is configured.');
     console.log('Next steps:');
-    console.log('  1. Share your public key with the repo admin');
-    console.log('  2. Commit an .env file to trigger encryption');
-    console.log('  3. Run the project as usual; .secret.* files will be tracked instead of raw .env values');
+    console.log('  1. Share your public key with the repo admin.');
+    console.log(`  2. ${config.encryptionTrigger === 'commit' ? 'Commit an .env file to trigger encryption via the pre-commit hook.' : 'Stage an .env file to trigger encryption automatically.'}`);
+    console.log('  3. Keep using the repo normally; tracked files will be the encrypted .secret.* versions instead of raw .env values.');
   } catch {
     console.log('git-env-share: Not inside a Git repository. Skipping setup.');
   }
