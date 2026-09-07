@@ -58,7 +58,7 @@ export function gitAdd(...paths: Array<string | string[] | undefined | null>): v
   });
 
   if (!items.length) return;
-  execGit(['add', ...items.map((item) => `"${item}"`)]);
+  execGit(['add', ...items]);
 }
 
 export function gitRestoreStaged(...paths: Array<string | string[] | undefined | null>): void {
@@ -70,7 +70,7 @@ export function gitRestoreStaged(...paths: Array<string | string[] | undefined |
   if (!items.length) return;
 
   try {
-    execGit(['restore', '--staged', ...items.map((item) => `"${item}"`)]);
+    execGit(['restore', '--staged', ...items]);
   } catch {
     // Ignore if file was never staged.
   }
@@ -85,7 +85,7 @@ export function gitResetPaths(...paths: Array<string | string[] | undefined | nu
   if (!items.length) return;
 
   try {
-    execGit(['reset', ...items.map((item) => `"${item}"`)]);
+    execGit(['reset', ...items]);
   } catch {
     // Ignore if no files matched.
   }

@@ -22,10 +22,10 @@ async function promptForConfig(): Promise<void> {
 
   const modeAnswer = await askBooleanQuestion('Use SSH mode instead of age mode?');
   const mode = modeAnswer ? 'ssh' : 'age';
-  const encryptionTriggerAnswer = await askBooleanQuestion('Use commit-time encryption instead of stage-time encryption?');
+  const encryptionTriggerAnswer = await askBooleanQuestion('Use manual encryption mode instead of commit-time encryption?');
   const config: GitEnvShareConfig = {
     mode,
-    encryptionTrigger: encryptionTriggerAnswer ? 'commit' : 'stage'
+    encryptionTrigger: encryptionTriggerAnswer ? 'manual' : 'commit'
   };
 
   if (mode === 'age') {

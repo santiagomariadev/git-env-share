@@ -6,7 +6,7 @@ It encrypts sensitive `.env` files with `age`, keeps raw values out of the repo,
 ## Why this package is useful
 
 - Keeps `.env` values out of Git by default
-- Encrypts files automatically when they are staged or committed, depending on config
+- Encrypts files automatically before commit by default, with optional manual commands
 - Restores decrypted local files on checkout, pull, and clone
 - Works with either `age` keys or SSH recipient authorizations
 - Exposes a small typed API for config-aware tooling
@@ -80,7 +80,8 @@ Every team member should have the `age` CLI installed locally:
    - update local Git filter settings
    - add `.secret.*` entries to `.gitattributes`
    - ignore raw `.env` files locally
-   - optionally install a pre-commit hook when `encryptionTrigger` is set to `commit`
+  - install a pre-commit hook by default (`encryptionTrigger: commit`)
+  - allow explicit manual encryption flows with `git-env-share-stage-env` and `git-env-share-push-env`
 
 ## Common commands
 
@@ -89,6 +90,8 @@ These are the main commands users will run:
 ```bash
 npx git-env-share-init
 npx git-env-share-reconfigure
+npx git-env-share-stage-env
+npx git-env-share-push-env
 npx git-env-share-generate-key
 npx git-env-share-add-key age1...
 npx git-env-share-add-ssh-key "ssh-ed25519 AAAA..."
@@ -141,41 +144,48 @@ git pull
 
 ## Daily workflow
 
-By default, git-env-share encrypts when files are staged (`git add`). This is the safest default and the recommended setting for most repos.
+By default, git-env-share uses commit-time encryption (`encryptionTrigger: "commit"`). This fits the common team pattern where `.env` files stay ignored and only `.secret.env*` files are tracked.
 
-If you prefer commit-time encryption instead, set `encryptionTrigger` to `"commit"` in the repo config. In that mode, git-env-share installs a pre-commit hook and encrypts right before the commit is created.
-
-### Default stage-based flow
+### Default commit-based flow
 
 ```bash
-# edit your .env file
-# stage it
-
-git add .
+# edit your .env files
+git commit -m "update app config"
 ```
 
-The configured trigger will:
+In commit mode, the pre-commit hook:
 
-- detect `.env` files and update the encrypted secret files
-- keep raw `.env` files ignored locally
-- stage the generated `.secret.env` files automatically in stage mode
+- detects `.env*` files in the working tree
+- encrypts them into `.secret.env*`
+- stages only the encrypted `.secret.*` artifacts (and `.gitignore` updates)
 
-### Optional commit-based flow
+### Manual flow with explicit commands
+
+If your team prefers controlling exactly when encrypted artifacts are staged/committed:
 
 ```bash
-# edit your .env file
-git commit -m "update env"
+# encrypt and stage .secret.env* files
+npx git-env-share-stage-env
+
+# commit manually
+git commit -m "security: refresh encrypted env files"
 ```
 
-In commit mode, the pre-commit hook re-encrypts the file before the commit completes and stages the encrypted output as needed.
+Or do both steps in one command:
 
-Example config for stage mode:
+```bash
+npx git-env-share-push-env -m "security: refresh encrypted env files"
+```
+
+`git-env-share-push-env` stages encrypted files and then runs `git commit`. It does not run `git push`.
+
+Example config for manual mode:
 
 ```json
 {
   "git-env-share": {
     "mode": "age",
-    "encryptionTrigger": "stage"
+    "encryptionTrigger": "manual"
   }
 }
 ```
@@ -191,11 +201,11 @@ Example config for commit mode:
 }
 ```
 
-## Switching between stage and commit modes
+## Switching between manual and commit modes
 
 Use this when you want to move from one trigger strategy to the other.
 
-### From `stage` to `commit`
+### From `manual` to `commit` (recommended default)
 
 1. Update the repo config:
 
@@ -214,7 +224,7 @@ Use this when you want to move from one trigger strategy to the other.
    npx git-env-share-reconfigure
    ```
 
-3. Commit as usual. The hook will encrypt the file before the commit succeeds.
+3. Commit as usual. The hook will encrypt `.env*` content into `.secret.env*` before the commit succeeds.
 
 Precautions:
 
@@ -222,7 +232,7 @@ Precautions:
 - review any existing `.secret.*` files and confirm they match the current `.env` state
 - if you previously had a custom pre-commit hook, verify the git-env-share hook was appended safely instead of replacing existing logic
 
-### From `commit` to `stage`
+### From `commit` to `manual`
 
 1. Update the repo config:
 
@@ -230,7 +240,7 @@ Precautions:
    {
      "git-env-share": {
        "mode": "age",
-       "encryptionTrigger": "stage"
+       "encryptionTrigger": "manual"
      }
    }
    ```
@@ -249,11 +259,11 @@ Precautions:
 
    If the hook was previously appended rather than replaced, keep the existing script and remove only the git-env-share line you added.
 
-4. From then on, a normal `git add .` will trigger the encrypted output.
+4. From then on, use `git-env-share-stage-env` (or `git-env-share-push-env`) whenever you want to refresh encrypted artifacts.
 
 Precautions:
 
-- if you switch back to stage mode, re-stage any `.env` changes that were previously relying on the commit hook
+- if you switch back to manual mode, run `git-env-share-stage-env` before committing `.secret.*` updates
 - check your `.secret.*` files before pushing to avoid committing stale encrypted content
 - confirm no duplicate or conflicting hook entries remain in `.git/hooks/pre-commit`
 

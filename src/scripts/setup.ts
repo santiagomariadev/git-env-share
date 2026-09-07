@@ -80,16 +80,18 @@ function configureGitAgeScripts(rootDir: string) {
     ? fs.readFileSync(attributesPath, 'utf-8')
     : '';
 
+  const envRules = ['.secret.env* filter=git-age'];
+
   if (!attributesContent.includes('filter=git-age')) {
     const attributeLines = [
       '',
-      '# Encrypt secret files with git-env-share',
-      '.secret.env* filter=git-age',
+      '# Encrypt environment files with git-env-share',
+      ...envRules,
       ''
     ];
     attributesContent += attributeLines.join('\n');
     fs.writeFileSync(attributesPath, attributesContent);
-    console.log('✓ Added .secret.env* rule to .gitattributes');
+    console.log('✓ Added .secret.env* filter rule to .gitattributes');
   }
 
   console.log('✓ Successfully configured git-env-share filter drivers.');
@@ -188,7 +190,7 @@ export async function setup() {
     console.log('\n✅ git-env-share is configured.');
     console.log('Next steps:');
     console.log('  1. Share your public key with the repo admin.');
-    console.log(`  2. ${config.encryptionTrigger === 'commit' ? 'Commit an .env file to trigger encryption via the pre-commit hook.' : 'Stage an .env file to trigger encryption automatically.'}`);
+    console.log(`  2. ${config.encryptionTrigger === 'commit' ? 'Commit an .env file to trigger encryption via the pre-commit hook.' : 'Run "npx git-env-share-stage-env" when you want to refresh encrypted .secret files manually.'}`);
     console.log('  3. Keep using the repo normally; tracked files will be the encrypted .secret.* versions instead of raw .env values.');
   } catch {
     console.log('git-env-share: Not inside a Git repository. Skipping setup.');
