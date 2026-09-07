@@ -11,20 +11,6 @@ It encrypts sensitive `.env` files with `age`, keeps raw values out of the repo,
 - Works with either `age` keys or SSH recipient authorizations
 - Exposes a small typed API for config-aware tooling
 
-## TypeScript usage
-
-```ts
-import {
-  loadGitEnvShareConfig,
-  resolvePrivateKeyPath,
-  type GitEnvShareConfig
-} from 'git-shared-envs';
-
-const config: GitEnvShareConfig = loadGitEnvShareConfig();
-const keyPath = resolvePrivateKeyPath(config);
-console.log(config.mode, keyPath);
-```
-
 ## Prerequisites
 
 Every team member should have the `age` CLI installed locally:
@@ -35,13 +21,13 @@ Every team member should have the `age` CLI installed locally:
 
 ## Installation
 
-1. Install the package as a dev dependency:
+1. Install the package in the repo you want to protect:
 
    ```bash
    npm install --save-dev git-shared-envs
    ```
 
-2. Configure the repo in either `package.json` or `.git-env-share.config`.
+2. Create or update the repo config in either `package.json` or `.git-env-share.config`.
 
    Default `age` mode:
 
@@ -49,7 +35,8 @@ Every team member should have the `age` CLI installed locally:
    {
      "git-env-share": {
        "mode": "age",
-       "ageKeyPath": "~/.age/key.txt"
+       "ageKeyPath": "~/.age/key.txt",
+       "encryptionTrigger": "commit"
      }
    }
    ```
@@ -61,7 +48,8 @@ Every team member should have the `age` CLI installed locally:
      "git-env-share": {
        "mode": "ssh",
        "sshKeyPath": "~/.ssh/id_ed25519",
-       "githubUsernames": ["octocat"]
+       "githubUsernames": ["octocat"],
+       "encryptionTrigger": "commit"
      }
    }
    ```
@@ -70,18 +58,33 @@ Every team member should have the `age` CLI installed locally:
 
    ```json
    {
-     "mode": "ssh",
-     "sshKeyPath": "~/.ssh/id_ed25519"
+     "mode": "age",
+     "ageKeyPath": "~/.age/key.txt",
+     "encryptionTrigger": "commit"
    }
    ```
 
-3. The package will configure the repository for you:
+3. Run the repo setup command once the config is in place:
 
-   - update local Git filter settings
-   - add `.secret.*` entries to `.gitattributes`
-   - ignore raw `.env` files locally
-  - install a pre-commit hook by default (`encryptionTrigger: commit`)
-  - allow explicit manual encryption flows with `git-env-share-stage-env` and `git-env-share-push-env`
+   ```bash
+   npx git-env-share-init
+   ```
+
+   This configures the repository for you by:
+
+   - updating the local Git filter settings
+   - adding `.secret.*` entries to `.gitattributes`
+   - ignoring raw `.env` files locally
+   - installing the pre-commit hook when `encryptionTrigger` is `commit`
+   - preparing manual encryption flows when `encryptionTrigger` is `manual`
+
+## Quick start for a team repo
+
+1. Install the package and add a repo config.
+2. Run `npx git-env-share-init` in the project root.
+3. Share the generated public key or GitHub username with the repo admin.
+4. Commit and push the encrypted `.secret.*` artifacts as normal.
+5. New team members pull the repo and the smudge filter restores their local `.env` files automatically.
 
 ## Common commands
 
@@ -98,7 +101,13 @@ npx git-env-share-add-ssh-key "ssh-ed25519 AAAA..."
 npx git-env-share-add-github-user octocat
 ```
 
-`git-env-share-init` creates a repo config when missing, while `git-env-share-reconfigure` re-applies the Git filter and hook setup using the current config.
+Notes:
+
+- `git-env-share-init` creates a repo config when missing.
+- `git-env-share-reconfigure` reapplies the Git filter and hook setup using the current config.
+- `git-env-share-add-key` is for adding an Age public key.
+- `git-env-share-add-github-user` is for SSH mode recipients.
+- `git-env-share-add-ssh-key` adds a raw SSH public key directly.
 
 ## Team onboarding workflow
 
@@ -122,6 +131,7 @@ In `age` mode, once the teammate shares their public key (`age1...`), run:
 
 ```bash
 npx git-env-share-add-key age1...
+git add .agerecipients
 git commit -m "security: add team member key"
 git push
 ```
@@ -129,7 +139,8 @@ git push
 In `ssh` mode, add the GitHub username instead:
 
 ```bash
-npx git-env-share-add-key octocat
+npx git-env-share-add-github-user octocat
+git add .agerecipients
 git commit -m "security: add ssh recipient"
 git push
 ```
@@ -141,6 +152,10 @@ The smudge filter decrypts `.secret.env*` files and recreates the local `.env` f
 ```bash
 git pull
 ```
+
+If a local environment file is missing, generate or restore it through the normal Git checkout flow; the project is designed to keep raw `.env` values out of version control.
+
+For local development on this package itself, see [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Daily workflow
 

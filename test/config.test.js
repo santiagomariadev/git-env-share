@@ -8,6 +8,7 @@ const { execFileSync } = require('node:child_process');
 const { loadGitEnvShareConfig, resolvePrivateKeyPath, hasExplicitConfig } = require('../dist/config');
 const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncryption');
 const { shouldSkipRemoteValidation } = require('../dist/utils/git');
+const { shouldRunPreCommitHook } = require('../dist/bin/pre-commit');
 
 const runIntegrationTests = process.env.GIT_ENV_SHARE_RUN_INTEGRATION === '1';
 
@@ -162,6 +163,17 @@ test('skips SSH validation for HTTPS remotes and honors config opt-out', () => {
 
   const invalidConfig = loadGitEnvShareConfig(dir, { encryptionTrigger: 'unexpected' });
   assert.equal(invalidConfig.encryptionTrigger, 'commit');
+});
+
+test('pre-commit hook respects encryption trigger mode', () => {
+  const manualDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-manual-hook-'));
+  fs.writeFileSync(path.join(manualDir, '.git-env-share.config'), JSON.stringify({ encryptionTrigger: 'manual' }, null, 2));
+
+  const commitDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-commit-hook-'));
+  fs.writeFileSync(path.join(commitDir, '.git-env-share.config'), JSON.stringify({ encryptionTrigger: 'commit' }, null, 2));
+
+  assert.equal(shouldRunPreCommitHook(manualDir), false);
+  assert.equal(shouldRunPreCommitHook(commitDir), true);
 });
 
 const integrationTest = runIntegrationTests ? test : test.skip;
