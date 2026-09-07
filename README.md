@@ -1,4 +1,4 @@
-# git-shared-envs
+# git-env-share
 
 A TypeScript-first Node.js tool for securely sharing environment files in a Git repository.
 It encrypts sensitive `.env` files with `age`, keeps raw values out of the repo, and supports SSH-based recipient management for team access.
@@ -24,7 +24,7 @@ Every team member should have the `age` CLI installed locally:
 1. Install the package in the repo you want to protect:
 
    ```bash
-   npm install --save-dev git-shared-envs
+   npm install --save-dev git-env-share
    ```
 
 2. Create or update the repo config in either `package.json` or `.git-env-share.config`.
@@ -67,7 +67,7 @@ Every team member should have the `age` CLI installed locally:
 3. Run the repo setup command once the config is in place:
 
    ```bash
-   npx git-env-share-init
+   npx ges init
    ```
 
    This configures the repository for you by:
@@ -81,7 +81,7 @@ Every team member should have the `age` CLI installed locally:
 ## Quick start for a team repo
 
 1. Install the package and add a repo config.
-2. Run `npx git-env-share-init` in the project root.
+2. Run `npx ges init` in the project root.
 3. Share the generated public key or GitHub username with the repo admin.
 4. Commit and push the encrypted `.secret.*` artifacts as normal.
 5. New team members pull the repo and the smudge filter restores their local `.env` files automatically.
@@ -91,35 +91,64 @@ Every team member should have the `age` CLI installed locally:
 These are the main commands users will run:
 
 ```bash
-npx git-env-share-init
-npx git-env-share-reconfigure
-npx git-env-share-stage-env
-npx git-env-share-push-env
-npx git-env-share-generate-key
-npx git-env-share-add-key age1...
-npx git-env-share-add-ssh-key "ssh-ed25519 AAAA..."
-npx git-env-share-add-github-user octocat
+npx ges init
+npx ges reconfigure
+npx ges stage
+npx ges push
+npx ges generate-key
+npx ges add-key age1...
+npx ges add-ssh-key "ssh-ed25519 AAAA..."
+npx ges add-github-user octocat
 ```
 
 Notes:
 
-- `git-env-share-init` creates a repo config when missing.
-- `git-env-share-reconfigure` reapplies the Git filter and hook setup using the current config.
-- `git-env-share-add-key` is for adding an Age public key.
-- `git-env-share-add-github-user` is for SSH mode recipients.
-- `git-env-share-add-ssh-key` adds a raw SSH public key directly.
+- `ges init` creates a repo config when missing.
+- `ges reconfigure` reapplies the Git filter and hook setup using the current config.
+- `ges add-key` is for adding an Age public key.
+- `ges add-github-user` is for SSH mode recipients.
+- `ges add-ssh-key` adds a raw SSH public key directly.
 
-## Team onboarding workflow
+## AGE MODE - Team onboarding workflow
+
+Use this path when the repository is configured with `mode: "age"`.
 
 ### 1) New member joins the project
 
-If the project uses `age` mode, generate a private key if needed:
+Generate a private key if needed:
 
 ```bash
-npx git-env-share-generate-key
+npx ges generate-key
 ```
 
-If the project uses SSH mode, ensure the teammate has a valid SSH key:
+### 2) Repo admin adds the new member
+
+Once the teammate shares their public key (`age1...`), run:
+
+```bash
+npx ges add-key age1...
+git add .agerecipients
+git commit -m "security: add team member key"
+git push
+```
+
+### 3) New member pulls access
+
+The smudge filter decrypts `.secret.env*` files and recreates the local `.env` file automatically:
+
+```bash
+git pull
+```
+
+If a local environment file is missing, generate or restore it through the normal Git checkout flow; the project is designed to keep raw `.env` values out of version control.
+
+## SSH MODE - Team onboarding workflow
+
+Use this path when the repository is configured with `mode: "ssh"`.
+
+### 1) New member joins the project
+
+Ensure the teammate has a valid SSH key:
 
 ```bash
 ssh-keygen -t ed25519 -C "you@example.com"
@@ -127,19 +156,10 @@ ssh-keygen -t ed25519 -C "you@example.com"
 
 ### 2) Repo admin adds the new member
 
-In `age` mode, once the teammate shares their public key (`age1...`), run:
+Add the GitHub username instead:
 
 ```bash
-npx git-env-share-add-key age1...
-git add .agerecipients
-git commit -m "security: add team member key"
-git push
-```
-
-In `ssh` mode, add the GitHub username instead:
-
-```bash
-npx git-env-share-add-github-user octocat
+npx ges add-github-user octocat
 git add .agerecipients
 git commit -m "security: add ssh recipient"
 git push
@@ -180,7 +200,7 @@ If your team prefers controlling exactly when encrypted artifacts are staged/com
 
 ```bash
 # encrypt and stage .secret.env* files
-npx git-env-share-stage-env
+npx ges stage
 
 # commit manually
 git commit -m "security: refresh encrypted env files"
@@ -189,10 +209,10 @@ git commit -m "security: refresh encrypted env files"
 Or do both steps in one command:
 
 ```bash
-npx git-env-share-push-env -m "security: refresh encrypted env files"
+npx ges push -m "security: refresh encrypted env files"
 ```
 
-`git-env-share-push-env` stages encrypted files and then runs `git commit`. It does not run `git push`.
+`ges push` stages encrypted files and then runs `git commit`. It does not run `git push`.
 
 Example config for manual mode:
 
@@ -236,7 +256,7 @@ Use this when you want to move from one trigger strategy to the other.
 2. Re-run setup so the pre-commit hook is installed:
 
    ```bash
-   npx git-env-share-reconfigure
+   npx ges reconfigure
    ```
 
 3. Commit as usual. The hook will encrypt `.env*` content into `.secret.env*` before the commit succeeds.
@@ -263,7 +283,7 @@ Precautions:
 2. Re-run setup to keep the Git filter configuration in sync:
 
    ```bash
-   npx git-env-share-reconfigure
+   npx ges reconfigure
    ```
 
 3. Remove or disable the old pre-commit hook if you no longer want commit-time encryption:
@@ -274,11 +294,11 @@ Precautions:
 
    If the hook was previously appended rather than replaced, keep the existing script and remove only the git-env-share line you added.
 
-4. From then on, use `git-env-share-stage-env` (or `git-env-share-push-env`) whenever you want to refresh encrypted artifacts.
+4. From then on, use `ges stage` (or `ges push`) whenever you want to refresh encrypted artifacts.
 
 Precautions:
 
-- if you switch back to manual mode, run `git-env-share-stage-env` before committing `.secret.*` updates
+- if you switch back to manual mode, run `ges stage` before committing `.secret.*` updates
 - check your `.secret.*` files before pushing to avoid committing stale encrypted content
 - confirm no duplicate or conflicting hook entries remain in `.git/hooks/pre-commit`
 

@@ -35,7 +35,7 @@ async function confirmSetup() {
 
 async function configureGitHooks(gitHooksDir: string) {
   const precommitHookPath = path.join(gitHooksDir, 'pre-commit');
-  const hookCommand = 'npx git-env-share-precommit';
+  const hookCommand = 'npx ges precommit';
   const hookScriptHeader = '#!/bin/sh\n# git-env-share pre-commit hook\n';
 
   if (!fs.existsSync(precommitHookPath)) {
@@ -68,7 +68,7 @@ function configureGitAgeScripts(rootDir: string) {
   const attributesPath = path.join(rootDir, '.gitattributes');
 
   spawnSync('git', ['config', '--local', 'filter.git-age.clean', 'cat'], { stdio: 'inherit' });
-  spawnSync('git', ['config', '--local', 'filter.git-age.smudge', 'npx git-env-share-smudge %f'], { stdio: 'inherit' });
+  spawnSync('git', ['config', '--local', 'filter.git-age.smudge', 'npx ges smudge %f'], { stdio: 'inherit' });
   spawnSync('git', ['config', '--local', 'filter.git-age.required', 'true'], { stdio: 'inherit' });
 
   if (!fs.existsSync(recipientsPath)) {
@@ -190,7 +190,7 @@ export async function setup() {
     console.log('\n✅ git-env-share is configured.');
     console.log('Next steps:');
     console.log('  1. Share your public key with the repo admin.');
-    console.log(`  2. ${config.encryptionTrigger === 'commit' ? 'Commit an .env file to trigger encryption via the pre-commit hook.' : 'Run "npx git-env-share-stage-env" when you want to refresh encrypted .secret files manually.'}`);
+    console.log(`  2. ${config.encryptionTrigger === 'commit' ? 'Commit an .env file to trigger encryption via the pre-commit hook.' : 'Run "npx ges stage" when you want to refresh encrypted .secret files manually.'}`);
     console.log('  3. Keep using the repo normally; tracked files will be the encrypted .secret.* versions instead of raw .env values.');
   } catch {
     console.log('git-env-share: Not inside a Git repository. Skipping setup.');

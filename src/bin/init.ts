@@ -16,7 +16,7 @@ async function promptForConfig(): Promise<void> {
 
   const answer = await askBooleanQuestion('No git-env-share config was found. Would you like to create one now?');
   if (!answer) {
-    console.log('Skipping config creation. You can run git-env-share-init later or add the repo config manually.');
+    console.log('Skipping config creation. You can run "npx ges init" later or add the repo config manually.');
     return;
   }
 
@@ -55,7 +55,7 @@ async function promptForConfig(): Promise<void> {
   console.log(`✓ Wrote repo config to ${configPath}`);
 }
 
-async function main() {
+export async function runInit() {
   await promptForConfig();
   const config = loadGitEnvShareConfig(process.cwd());
   if (config.mode === 'ssh' && (!config.githubUsernames || config.githubUsernames.length === 0)) {
@@ -64,4 +64,6 @@ async function main() {
   await setup();
 }
 
-void main();
+if (require.main === module) {
+  void runInit();
+}

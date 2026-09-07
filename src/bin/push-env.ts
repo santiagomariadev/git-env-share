@@ -20,13 +20,13 @@ function parseCommitMessage(argv: string[]): string {
   return message;
 }
 
-function runPushEnv() {
+export function runPushEnv(argv = process.argv.slice(2)) {
   try {
     const rootDir = getGitRoot();
     process.chdir(rootDir);
     ensureManualMode(rootDir);
 
-    const commitMessage = parseCommitMessage(process.argv.slice(2));
+    const commitMessage = parseCommitMessage(argv);
     const { envFiles, encryptedCount } = stageEnvSecrets(rootDir);
 
     if (envFiles.length === 0) {
@@ -47,9 +47,11 @@ function runPushEnv() {
 
     console.log(`✓ Committed encrypted updates for ${encryptedCount} .env file(s).`);
   } catch (error: any) {
-    console.error('✕ push-env command failed:', error.message);
+    console.error('✕ push command failed:', error.message);
     process.exit(1);
   }
 }
 
-runPushEnv();
+if (require.main === module) {
+  runPushEnv();
+}

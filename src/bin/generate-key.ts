@@ -59,4 +59,10 @@ async function generateKey() {
   }
 }
 
-void generateKey();
+export async function runGenerateKey() {
+  await generateKey();
+}
+
+if (require.main === module) {
+  void runGenerateKey();
+}

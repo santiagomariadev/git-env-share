@@ -17,13 +17,13 @@ function readPublicKeyFromStdIn(query: string): Promise<string> {
   });
 }
 
-async function addKeyAndReencrypt() {
+export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
   try {
     const rootDir = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).stdout.trim();
     const config = loadGitEnvShareConfig(rootDir);
     const recipientsPath = path.join(rootDir, config.recipientsFile || '.agerecipients');
 
-    let pubKey = process.argv[2];
+    let pubKey = argv[0];
     const isSshMode = config.mode === 'ssh';
 
     if (!pubKey) {
@@ -119,4 +119,6 @@ async function addKeyAndReencrypt() {
   }
 }
 
-void addKeyAndReencrypt();
+if (require.main === module) {
+  void runAddKeyAndReencrypt();
+}

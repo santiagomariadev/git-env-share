@@ -4,8 +4,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
 
-function runSmudge() {
-  const secretFilePath = process.argv[2];
+export function runSmudge(argv = process.argv.slice(2)) {
+  const secretFilePath = argv[0];
   const projectRoot = process.cwd();
   const config = loadGitEnvShareConfig(projectRoot);
   const keyPath = resolvePrivateKeyPath(config, projectRoot);
@@ -25,7 +25,7 @@ function runSmudge() {
     console.error('✕ Decryption failed.');
     const guidanceMessage = config.mode === 'ssh'
       ? 'Ensure your SSH private key matches the GitHub public key authorized for this repository.'
-      : 'Run "npx git-env-share-generate-key" to generate your age keypair and share the public key with your repository admin.';
+      : 'Run "npx ges generate-key" to generate your age keypair and share the public key with your repository admin.';
     console.error(guidanceMessage);
     process.exit(1);
   }
@@ -71,4 +71,6 @@ function runSmudge() {
   process.stdout.write(ageProcess.stdout);
 }
 
-runSmudge();
+if (require.main === module) {
+  runSmudge();
+}

@@ -92,7 +92,7 @@ integrationTest('installs the package and validates manual commands with mode gu
 
   // We call the package's actual reconfigure step to ensure the installed binary creates the Git filter
   // and repo settings exactly the way a user would see in practice.
-  const setupResult = spawnSync('script', ['-qec', 'npx git-env-share-reconfigure', '/dev/null'], {
+  const setupResult = spawnSync('script', ['-qec', 'npx ges reconfigure', '/dev/null'], {
     cwd: repoDir,
     env,
     input: 'y\n',
@@ -100,7 +100,7 @@ integrationTest('installs the package and validates manual commands with mode gu
   });
 
   if (setupResult.status !== 0) {
-    throw new Error(`git-env-share-reconfigure failed:\n${setupResult.stderr || setupResult.stdout || ''}`);
+    throw new Error(`ges reconfigure failed:\n${setupResult.stderr || setupResult.stdout || ''}`);
   }
 
   const envFilePath = path.join(repoDir, '.env');
@@ -113,8 +113,8 @@ integrationTest('installs the package and validates manual commands with mode gu
   fs.writeFileSync(devEnvFilePath, originalDevEnv);
 
   // In commit mode, manual commands must refuse execution and point users to manual mode.
-  const stageInCommitMode = runCommandResult('npx', ['git-env-share-stage-env'], { cwd: repoDir, env });
-  const pushInCommitMode = runCommandResult('npx', ['git-env-share-push-env', '-m', 'should not commit'], { cwd: repoDir, env });
+  const stageInCommitMode = runCommandResult('npx', ['ges', 'stage'], { cwd: repoDir, env });
+  const pushInCommitMode = runCommandResult('npx', ['ges', 'push', '-m', 'should not commit'], { cwd: repoDir, env });
 
   assert.notEqual(stageInCommitMode.status, 0);
   assert.notEqual(pushInCommitMode.status, 0);
@@ -128,7 +128,7 @@ integrationTest('installs the package and validates manual commands with mode gu
     encryptionTrigger: 'manual'
   }, null, 2));
 
-  const manualSetupResult = spawnSync('script', ['-qec', 'npx git-env-share-reconfigure', '/dev/null'], {
+  const manualSetupResult = spawnSync('script', ['-qec', 'npx ges reconfigure', '/dev/null'], {
     cwd: repoDir,
     env,
     input: 'y\n',
@@ -136,10 +136,10 @@ integrationTest('installs the package and validates manual commands with mode gu
   });
 
   if (manualSetupResult.status !== 0) {
-    throw new Error(`git-env-share-reconfigure (manual) failed:\n${manualSetupResult.stderr || manualSetupResult.stdout || ''}`);
+    throw new Error(`ges reconfigure (manual) failed:\n${manualSetupResult.stderr || manualSetupResult.stdout || ''}`);
   }
 
-  runCommand('npx', ['git-env-share-stage-env'], { cwd: repoDir, env });
+  runCommand('npx', ['ges', 'stage'], { cwd: repoDir, env });
 
   const secretEnvPath = path.join(repoDir, '.secret.env');
   const secretDevEnvPath = path.join(repoDir, '.secret.env.development');
@@ -172,7 +172,7 @@ integrationTest('installs the package and validates manual commands with mode gu
 
   // push-env should re-encrypt/stage and commit in one command, with custom commit message support.
   fs.writeFileSync(envFilePath, 'HELLO=updated\n');
-  runCommand('npx', ['git-env-share-push-env', '-m', 'security: rotate env secrets'], { cwd: repoDir, env });
+  runCommand('npx', ['ges', 'push', '-m', 'security: rotate env secrets'], { cwd: repoDir, env });
 
   const latestMessage = runCommand('git', ['log', '-1', '--pretty=%s'], { cwd: repoDir, env });
   const latestChanged = runCommand('git', ['show', '--name-only', '--pretty=', 'HEAD'], { cwd: repoDir, env });
