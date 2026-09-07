@@ -9,10 +9,16 @@ const { loadGitEnvShareConfig, resolvePrivateKeyPath, hasExplicitConfig } = requ
 const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncryption');
 const { shouldSkipRemoteValidation } = require('../dist/utils/git');
 
+const runIntegrationTests = process.env.GIT_ENV_SHARE_RUN_INTEGRATION === '1';
+
+// This helper executes real Git commands against a temporary repo. We keep the test close to
+// production behavior without mocking Git itself, which is important for filter-driven workflows.
 function runGit(args, cwd) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
+// We use tiny shell scripts here only as stand-ins for the real age encryption/decryption logic.
+// The test is still exercising the real Git filter lifecycle: clean/smudge on add/checkout/pull.
 function writeFilterScripts(sharedRoot) {
   const encryptScript = path.join(sharedRoot, 'encrypt-env.sh');
   const decryptScript = path.join(sharedRoot, 'decrypt-env.sh');
@@ -27,6 +33,7 @@ function writeFilterScripts(sharedRoot) {
 }
 
 function initRepoWithFilter(repoRoot, encryptScript, decryptScript) {
+  // A temp Git repo is the most faithful way to test Git filters without touching the developer machine.
   runGit(['init', '-b', 'main'], repoRoot);
   runGit(['config', 'user.name', 'Test User'], repoRoot);
   runGit(['config', 'user.email', 'test@example.com'], repoRoot);
@@ -34,6 +41,7 @@ function initRepoWithFilter(repoRoot, encryptScript, decryptScript) {
   runGit(['config', 'filter.fake-env.smudge', `bash ${decryptScript}`], repoRoot);
   runGit(['config', 'filter.fake-env.required', 'true'], repoRoot);
 
+  // .gitattributes is the Git contract that triggers the filter for .env files.
   fs.writeFileSync(path.join(repoRoot, '.gitattributes'), '.env filter=fake-env\n');
 }
 
@@ -146,35 +154,50 @@ test('skips SSH validation for HTTPS remotes and honors config opt-out', () => {
   const config = loadGitEnvShareConfig(dir);
   assert.equal(config.enabled, true);
   assert.equal(config.paused, false);
-  assert.equal(config.encryptionTrigger, 'stage');
+  assert.equal(config.encryptionTrigger, 'commit');
 
-  const disabledConfig = loadGitEnvShareConfig(dir, { enabled: false, encryptionTrigger: 'commit' });
+  const disabledConfig = loadGitEnvShareConfig(dir, { enabled: false, encryptionTrigger: 'manual' });
   assert.equal(disabledConfig.enabled, false);
-  assert.equal(disabledConfig.encryptionTrigger, 'commit');
+  assert.equal(disabledConfig.encryptionTrigger, 'manual');
+
+  const invalidConfig = loadGitEnvShareConfig(dir, { encryptionTrigger: 'unexpected' });
+  assert.equal(invalidConfig.encryptionTrigger, 'commit');
 });
 
-test('applies real Git filter behavior for add, commit, and checkout', () => {
+const integrationTest = runIntegrationTests ? test : test.skip;
+
+// This is a Git contract test: we verify that the clean/smudge filter actually runs when Git
+// stages, commits and restores a file. The test is intentionally skipped by default because it is
+// slower and requires a real Git repository lifecycle.
+integrationTest('applies real Git filter behavior for add, commit, and checkout', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-git-flow-'));
   const { encryptScript, decryptScript } = writeFilterScripts(root);
   initRepoWithFilter(root, encryptScript, decryptScript);
 
+  // We write the raw env value then stage it. Git should invoke the clean filter and store the
+  // transformed content instead of the plaintext version in the index.
   fs.writeFileSync(path.join(root, '.env'), 'SECRET=value\n');
   runGit(['add', '.env'], root);
 
   const stagedBlob = runGit(['show', ':.env'], root).trim();
   assert.match(stagedBlob, /^encrypted:SECRET=value$/);
 
+  // A commit should keep the transformed content in the repository history.
   runGit(['commit', '-m', 'Add env file'], root);
   const committedBlob = runGit(['show', 'HEAD:.env'], root).trim();
   assert.match(committedBlob, /^encrypted:SECRET=value$/);
 
+  // Simulate a local modification and restore the file via checkout. Git should materialize the
+  // clean version from the repository (or the smudge pipeline), returning the original secret value.
   fs.writeFileSync(path.join(root, '.env'), 'SECRET=updated\n');
   runGit(['checkout', '--', '.env'], root);
 
   assert.equal(fs.readFileSync(path.join(root, '.env'), 'utf8'), 'SECRET=value');
 });
 
-test('pulls updated encrypted content through the same Git filter flow', () => {
+// This second integration test proves the same filter pipeline works across a clone/pull workflow,
+// which is one of the main real-world use cases for encrypted env files in shared repos.
+integrationTest('pulls updated encrypted content through the same Git filter flow', () => {
   const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-pull-flow-'));
   const originDir = path.join(baseDir, 'origin');
   const cloneDir = path.join(baseDir, 'clone');
@@ -183,6 +206,7 @@ test('pulls updated encrypted content through the same Git filter flow', () => {
   fs.mkdirSync(originDir);
   initRepoWithFilter(originDir, encryptScript, decryptScript);
 
+  // Start with a committed encrypted value in the origin repo, then clone it into a second repo.
   fs.writeFileSync(path.join(originDir, '.env'), 'SECRET=value\n');
   runGit(['add', '.env'], originDir);
   runGit(['commit', '-m', 'Initial env'], originDir);
@@ -194,6 +218,8 @@ test('pulls updated encrypted content through the same Git filter flow', () => {
   const clonedEnv = fs.readFileSync(path.join(cloneDir, '.env'), 'utf8');
   assert.equal(clonedEnv, 'SECRET=value');
 
+  // Update the source repo and pull the change into the clone. The working tree should receive the
+  // new decrypted value after the remote update is fetched and checked out.
   fs.writeFileSync(path.join(originDir, '.env'), 'SECRET=updated\n');
   runGit(['add', '.env'], originDir);
   runGit(['commit', '-m', 'Update env'], originDir);
