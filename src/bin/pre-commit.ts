@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import { loadGitEnvShareConfig } from '../config';
 import { getRemoteGitUrl } from '../utils/git';
 import { getEnvFilesAndUpdateGitIgnore, stageEnvSecrets } from '../utils/envWorkflow';
+
+export function shouldRunPreCommitHook(projectRoot = process.cwd()): boolean {
+  const config = loadGitEnvShareConfig(projectRoot);
+  return config.enabled !== false && !config.paused && config.encryptionTrigger === 'commit';
+}
 
 function verifyGitAccess() {
   const remoteUrl = getRemoteGitUrl();
@@ -34,6 +40,12 @@ function verifyGitAccess() {
 function runPreCommit() {
   try {
     const rootDir = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).stdout.trim();
+
+    if (!shouldRunPreCommitHook(rootDir)) {
+      console.log('git-env-share: pre-commit hook skipped because paused or encryptionTrigger is not "commit".');
+      return;
+    }
+
     const gitRemoteUrl = getRemoteGitUrl();
 
     if (!gitRemoteUrl) {
@@ -52,4 +64,6 @@ function runPreCommit() {
   }
 }
 
-runPreCommit();
+if (require.main === module) {
+  runPreCommit();
+}
