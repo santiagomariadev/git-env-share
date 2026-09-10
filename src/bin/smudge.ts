@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
+import { writeFileAtomic } from '../utils/files';
 
 export function runSmudge(argv = process.argv.slice(2)) {
   const secretFilePath = argv[0];
@@ -11,7 +12,7 @@ export function runSmudge(argv = process.argv.slice(2)) {
   const keyPath = resolvePrivateKeyPath(config, projectRoot);
 
   if (!keyPath || !fs.existsSync(keyPath)) {
-    console.error(`✕ Private key missing at ${keyPath}`);
+    console.error('✕ Private key is missing or unreadable.');
     console.error(`Update your ${config.encryptionKey === 'ssh' ? 'SSH' : 'age'} key setting in the project config or run the matching key-generation command.`);
     process.exit(1);
   }
@@ -58,12 +59,12 @@ export function runSmudge(argv = process.argv.slice(2)) {
             decryptedContent,
             Buffer.from('>>>>>>> REMOTE VERSION\n')
           ]);
-          fs.writeFileSync(envFilePath, conflictContent);
+          writeFileAtomic(envFilePath, conflictContent);
           console.warn(`Conflict markers added to ${envFilePath}. Please resolve manually.\n`);
         }
       }
     } else {
-      fs.writeFileSync(envFilePath, decryptedContent);
+      writeFileAtomic(envFilePath, decryptedContent);
       console.log(`✓ Restored local unencrypted file: ${envFilePath}`);
     }
   }

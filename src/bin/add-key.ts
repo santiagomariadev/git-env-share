@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { askBooleanQuestion } from '../utils/askQuestion';
 import { loadGitEnvShareConfig } from '../config';
-import { listRootEnvFiles } from '../utils/files';
+import { listRootEnvFiles, writeFileAtomic } from '../utils/files';
 import { getGitRoot } from '../utils/git';
 import { readRecipientsFileContent, resolveRecipientsPath } from '../utils/recipientsFile';
 import { addGitHubUser } from '../utils/sshEnvEncryption';
@@ -56,43 +56,62 @@ export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
     }
 
     const recipientsContent = readRecipientsFileContent(recipientsPath);
+    const hasRecipientAlready = recipientsContent.includes(pubKey);
 
-    if (recipientsContent.includes(pubKey)) {
+    if (hasRecipientAlready) {
       console.log('𝑖 Public key is already present in .agerecipients.');
-    } else {
-      const formattedEntry = `\n# Added on ${new Date().toISOString().split('T')[0]}\n${pubKey}\n`;
-      fs.appendFileSync(recipientsPath, formattedEntry);
-      console.log('✓ Added key to .agerecipients file.');
     }
+
+    const recipientsWithNewKey = hasRecipientAlready
+      ? recipientsContent
+      : `${recipientsContent}\n# Added on ${new Date().toISOString().split('T')[0]}\n${pubKey}\n`;
+
+    const tempRecipientsPath = hasRecipientAlready
+      ? null
+      : `${recipientsPath}.tmp-${process.pid}-${Date.now()}`;
+
+    if (tempRecipientsPath) {
+      fs.writeFileSync(tempRecipientsPath, recipientsWithNewKey, 'utf-8');
+    }
+
+    const recipientsPathForEncryption = tempRecipientsPath || recipientsPath;
 
     const envFiles = listRootEnvFiles(rootDir);
     const fileCount = envFiles.length;
 
-    if (fileCount === 0) {
-      console.log('No .env files were found to re-encrypt. Only .agerecipients was updated.');
-      spawnSync('git', ['add', recipientsPath], { stdio: 'inherit' });
-      return;
-    }
+    try {
+      if (fileCount === 0) {
+        if (!hasRecipientAlready) {
+          writeFileAtomic(recipientsPath, recipientsWithNewKey);
+          console.log('✓ Added key to .agerecipients file.');
+          spawnSync('git', ['add', recipientsPath], { stdio: 'inherit' });
+        }
+        console.log('No .env files were found to re-encrypt. Only .agerecipients was updated.');
+        return;
+      }
 
-    console.log(`\nThis will re-encrypt ${fileCount} environment file(s) and stage the updated .secret files.`);
-    const shouldProceed = await askBooleanQuestion('Do you want to continue with the re-encryption?');
-    if (!shouldProceed) {
-      console.log('Re-encryption cancelled. The new key was added to .agerecipients, but no files were rewritten.');
-      return;
-    }
+      console.log(`\nThis will re-encrypt ${fileCount} environment file(s) and stage the updated .secret files.`);
+      const shouldProceed = await askBooleanQuestion('Do you want to continue with the re-encryption?');
+      if (!shouldProceed) {
+        console.log('Re-encryption cancelled. No files were rewritten.');
+        return;
+      }
 
-    let count = 0;
+      const encryptedOutputs: Array<{ relativeEnvPath: string; secretFilePath: string; secretFileName: string; output: Buffer }> = [];
 
-    for (const relativeEnvPath of envFiles) {
-      const fullPath = path.join(rootDir, relativeEnvPath);
+      for (const relativeEnvPath of envFiles) {
+        const fullPath = path.join(rootDir, relativeEnvPath);
+        if (!fs.existsSync(fullPath)) {
+          continue;
+        }
 
-      if (fs.existsSync(fullPath)) {
         const dir = path.dirname(fullPath);
         const baseName = path.basename(fullPath);
-        const secretFilePath = path.join(dir, `.secret${baseName}`);
+        const secretFileName = `.secret${baseName}`;
+        const secretFilePath = path.join(dir, secretFileName);
 
         const plainData = fs.readFileSync(fullPath);
-        const ageProcess = spawnSync('age', ['-R', recipientsPath, '-e'], {
+        const ageProcess = spawnSync('age', ['-R', recipientsPathForEncryption, '-e'], {
           input: plainData,
           maxBuffer: 1024 * 1024 * 50
         });
@@ -102,17 +121,34 @@ export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
           process.exit(1);
         }
 
-        fs.writeFileSync(secretFilePath, ageProcess.stdout);
-        spawnSync('git', ['add', secretFilePath], { stdio: 'inherit' });
-        console.log(`✓ Re-encrypted & staged: .secret${baseName}`);
-        count++;
+        encryptedOutputs.push({
+          relativeEnvPath,
+          secretFilePath,
+          secretFileName,
+          output: ageProcess.stdout
+        });
+      }
+
+      for (const item of encryptedOutputs) {
+        writeFileAtomic(item.secretFilePath, item.output);
+        spawnSync('git', ['add', item.secretFilePath], { stdio: 'inherit' });
+        console.log(`✓ Re-encrypted & staged: ${item.secretFileName}`);
+      }
+
+      if (!hasRecipientAlready) {
+        writeFileAtomic(recipientsPath, recipientsWithNewKey);
+        console.log('✓ Added key to .agerecipients file.');
+      }
+
+      spawnSync('git', ['add', recipientsPath], { stdio: 'inherit' });
+
+      console.log(`\n✓ Successfully re-encrypted ${encryptedOutputs.length} secret file(s) and staged .agerecipients!`);
+      console.log('> Run "git commit -m "security: add new team member key"" to complete onboarding.');
+    } finally {
+      if (tempRecipientsPath && fs.existsSync(tempRecipientsPath)) {
+        fs.unlinkSync(tempRecipientsPath);
       }
     }
-
-    spawnSync('git', ['add', recipientsPath], { stdio: 'inherit' });
-
-    console.log(`\n✓ Successfully re-encrypted ${count} secret file(s) and staged .agerecipients!`);
-    console.log('> Run "git commit -m "security: add new team member key"" to complete onboarding.');
   } catch (error: any) {
     console.error('✕ Error executing add-key:', error.message);
     process.exit(1);

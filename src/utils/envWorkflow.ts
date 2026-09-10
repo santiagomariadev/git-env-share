@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ENCRYPTION_TRIGGERS } from '../config/defaults';
 import { loadGitEnvShareConfig } from '../config';
-import { listRootEnvFiles } from './files';
+import { listRootEnvFiles, writeFileAtomic } from './files';
 import { ensureRecipientsFile, resolveRecipientsPath } from './recipientsFile';
 import { normalizeLineEndings } from './text';
 import { execGit, getGitRoot, gitAdd, gitResetPaths, gitRestoreStaged } from './git';
@@ -159,8 +159,8 @@ export function secureEnvFile(rootDir: string, envFilePath: string, recipientsPa
   const secretFilePath = path.join(dir, secretFileName);
   const relativeSecretPath = path.relative(rootDir, secretFilePath);
 
-  if (!fs.existsSync(secretFilePath)) {
-    fs.writeFileSync(secretFilePath, '');
+  const secretExists = fs.existsSync(secretFilePath);
+  if (!secretExists) {
     console.log(`✓ Generated placeholder: ${relativeSecretPath}`);
   }
 
@@ -175,7 +175,7 @@ export function secureEnvFile(rootDir: string, envFilePath: string, recipientsPa
     process.exit(1);
   }
 
-  fs.writeFileSync(secretFilePath, ageProcess.stdout);
+  writeFileAtomic(secretFilePath, ageProcess.stdout);
   gitRestoreStaged(envFilePath);
   console.log(`✓ Unstaged raw file: ${envFilePath}`);
   gitAdd(relativeSecretPath, '.gitignore');

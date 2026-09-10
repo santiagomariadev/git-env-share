@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { ENCRYPTION_TRIGGERS } from '../config/defaults';
 import { loadGitEnvShareConfig } from '../config';
-import { getGitRoot, getRemoteGitUrl } from '../utils/git';
+import { getGitRoot, getRemoteGitUrl, shouldSkipRemoteValidation } from '../utils/git';
 import { getEnvFilesAndUpdateGitIgnore, stageEnvSecrets } from '../utils/envWorkflow';
 
 export function shouldRunPreCommitHook(projectRoot = process.cwd()): boolean {
@@ -10,11 +10,34 @@ export function shouldRunPreCommitHook(projectRoot = process.cwd()): boolean {
   return config.enabled !== false && !config.paused && config.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT;
 }
 
-function verifyGitAccess() {
-  const remoteUrl = getRemoteGitUrl();
+function resolveSshHostFromRemote(remoteUrl: string): string | null {
+  const normalized = remoteUrl.trim();
 
-  if (!remoteUrl) {
-    console.error('✕ Git Access Denied: No remote URL found for the repository.');
+  if (normalized.startsWith('ssh://')) {
+    try {
+      const parsed = new URL(normalized);
+      return parsed.hostname || null;
+    } catch {
+      return null;
+    }
+  }
+
+  const scpLike = normalized.match(/^[^@\s]+@([^:\s]+):/);
+  if (scpLike && scpLike[1]) {
+    return scpLike[1];
+  }
+
+  return null;
+}
+
+function verifyGitAccess(remoteUrl: string) {
+  const host = resolveSshHostFromRemote(remoteUrl);
+  if (!host) {
+    return;
+  }
+
+  if (!/^[A-Za-z0-9.-]+$/.test(host)) {
+    console.error('✕ Git Access Denied: repository remote host is invalid for SSH validation.');
     process.exit(1);
   }
 
@@ -22,7 +45,7 @@ function verifyGitAccess() {
     '-T',
     '-o',
     'BatchMode=yes',
-    remoteUrl.replace(/^(git@|https:\/\/)/, '').replace(/:.*/, '')
+    host
   ], { encoding: 'utf-8' });
 
   if (sshCheck.status === 255) {
@@ -41,6 +64,7 @@ function verifyGitAccess() {
 export function runPreCommit() {
   try {
     const rootDir = getGitRoot();
+    const config = loadGitEnvShareConfig(rootDir);
 
     if (!shouldRunPreCommitHook(rootDir)) {
       console.log('git-env-share: pre-commit hook skipped because paused or encryptionTrigger is not "commit".');
@@ -55,7 +79,10 @@ export function runPreCommit() {
       return;
     }
 
-    verifyGitAccess();
+    if (!shouldSkipRemoteValidation(gitRemoteUrl, config)) {
+      verifyGitAccess(gitRemoteUrl);
+    }
+
     stageEnvSecrets(rootDir);
 
     process.exit(0);

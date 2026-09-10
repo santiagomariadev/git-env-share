@@ -48,3 +48,9 @@ export function listRootEnvFiles(projectRoot = process.cwd()): string[] {
     .map((entry) => entry.name)
     .sort((left, right) => left.localeCompare(right));
 }
+
+export function writeFileAtomic(filePath: string, content: string | Buffer): void {
+  const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tempPath, content);
+  fs.renameSync(tempPath, filePath);
+}
