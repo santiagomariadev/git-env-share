@@ -7,7 +7,7 @@ import { getGitRoot, gitAdd, gitResetPaths, gitRestoreStaged } from './git';
 export function ensureManualMode(rootDir: string): void {
   const config = loadGitEnvShareConfig(rootDir);
   if (config.encryptionTrigger !== 'manual') {
-    throw new Error('This command is only available in manual mode. Update "encryptionTrigger" to "manual" in your repo config, then run setup again.');
+    throw new Error('This command is only available when "encryptionTrigger" is set to "manual". Update your repo config and run setup again.');
   }
 }
 
@@ -17,7 +17,7 @@ export function validateRecipients(rootDir: string): string {
 
   if (!fs.existsSync(recipientsPath)) {
     fs.writeFileSync(recipientsPath, '# Add age or SSH public keys (one per line)\n');
-    console.log('✓ Created recipients file for the configured mode:', config.mode);
+    console.log('✓ Created recipients file for the configured encryption key:', config.encryptionKey);
   }
 
   return recipientsPath;

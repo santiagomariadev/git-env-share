@@ -10,6 +10,16 @@ function normalizeArray(value: unknown): string[] {
   return [];
 }
 
+function resolveEncryptionKey(rawEncryptionKey?: unknown, fallback: 'age' | 'ssh' = DEFAULT_CONFIG.encryptionKey): 'age' | 'ssh' {
+  const normalizedKey = typeof rawEncryptionKey === 'string' ? rawEncryptionKey.toLowerCase() : undefined;
+
+  if (normalizedKey && VALID_MODES.includes(normalizedKey as (typeof VALID_MODES)[number])) {
+    return normalizedKey as 'age' | 'ssh';
+  }
+
+  return fallback;
+}
+
 export function hasExplicitConfig(projectRoot = process.cwd()): boolean {
   const rootDir = projectRoot || process.cwd();
   const packageJsonPath = path.join(rootDir, 'package.json');
@@ -42,7 +52,7 @@ export function loadGitEnvShareConfig(projectRoot = process.cwd(), overrides: Pa
   const packageJsonPath = path.join(rootDir, 'package.json');
   const configFilePath = path.join(rootDir, '.git-env-share.config');
 
-  const config: GitEnvShareConfig = { ...DEFAULT_CONFIG };
+  const config: GitEnvShareConfig = {};
 
   if (fs.existsSync(packageJsonPath)) {
     const pkg = readJsonFile(packageJsonPath) || {};
@@ -63,10 +73,8 @@ export function loadGitEnvShareConfig(projectRoot = process.cwd(), overrides: Pa
     Object.assign(config, overrides);
   }
 
-  config.mode = String(config.mode || DEFAULT_CONFIG.mode).toLowerCase();
-  if (!VALID_MODES.includes(config.mode as (typeof VALID_MODES)[number])) {
-    config.mode = DEFAULT_CONFIG.mode;
-  }
+  const encryptionKey = resolveEncryptionKey(config.encryptionKey, DEFAULT_CONFIG.encryptionKey);
+  config.encryptionKey = encryptionKey;
 
   config.ageKeyPath = config.ageKeyPath || DEFAULT_CONFIG.ageKeyPath;
   config.sshKeyPath = config.sshKeyPath || DEFAULT_CONFIG.sshKeyPath;
@@ -85,9 +93,12 @@ export function loadGitEnvShareConfig(projectRoot = process.cwd(), overrides: Pa
 export function resolvePrivateKeyPath(config: Partial<GitEnvShareConfig> = {}, projectRoot = process.cwd()): string | null {
   const effectiveConfig = loadGitEnvShareConfig(projectRoot);
   const mergedConfig = { ...effectiveConfig, ...config };
-  const mode = String(mergedConfig.mode || DEFAULT_CONFIG.mode).toLowerCase();
+  const encryptionKey = resolveEncryptionKey(
+    mergedConfig.encryptionKey ?? config.encryptionKey,
+    effectiveConfig.encryptionKey as 'age' | 'ssh'
+  );
 
-  const candidate = mode === 'ssh'
+  const candidate = encryptionKey === 'ssh'
     ? mergedConfig.sshKeyPath || DEFAULT_CONFIG.sshKeyPath
     : mergedConfig.ageKeyPath || DEFAULT_CONFIG.ageKeyPath;
 
@@ -97,7 +108,7 @@ export function resolvePrivateKeyPath(config: Partial<GitEnvShareConfig> = {}, p
   }
 
   const fallbackPaths: string[] = [];
-  if (mode === 'ssh') {
+  if (encryptionKey === 'ssh') {
     fallbackPaths.push(
       path.join(os.homedir(), '.ssh', 'id_ed25519'),
       path.join(os.homedir(), '.ssh', 'id_rsa'),

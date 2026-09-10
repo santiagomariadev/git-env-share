@@ -12,7 +12,7 @@ function runSmudge() {
 
   if (!keyPath || !fs.existsSync(keyPath)) {
     console.error(`✕ Private key missing at ${keyPath}`);
-    console.error(`Update your ${config.mode === 'ssh' ? 'SSH' : 'age'} key setting in the project config or run the matching key-generation command.`);
+    console.error(`Update your ${config.encryptionKey === 'ssh' ? 'SSH' : 'age'} key setting in the project config or run the matching key-generation command.`);
     process.exit(1);
   }
 
@@ -23,7 +23,7 @@ function runSmudge() {
 
   if (ageProcess.status !== 0) {
     console.error('✕ Decryption failed.');
-    const guidanceMessage = config.mode === 'ssh'
+    const guidanceMessage = config.encryptionKey === 'ssh'
       ? 'Ensure your SSH private key matches the GitHub public key authorized for this repository.'
       : 'Run "npx git-env-share-generate-key" to generate your age keypair and share the public key with your repository admin.';
     console.error(guidanceMessage);

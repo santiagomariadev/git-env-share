@@ -50,28 +50,41 @@ test('reads config from package.json with age as default', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-package-'));
 
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
-    'git-env-share': { mode: 'age', ageKeyPath: '~/.age/key.txt' }
+    'git-env-share': { encryptionKey: 'age', ageKeyPath: '~/.age/key.txt' }
   }, null, 2));
 
   const config = loadGitEnvShareConfig(dir);
 
-  assert.equal(config.mode, 'age');
+  assert.equal(config.encryptionKey, 'age');
   assert.equal(config.ageKeyPath, '~/.age/key.txt');
+});
+
+test('falls back to the age default when encryptionKey is invalid', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-invalid-key-'));
+
+  fs.writeFileSync(path.join(dir, '.git-env-share.config'), JSON.stringify({
+    encryptionKey: 'invalid', sshKeyPath: '~/.ssh/id_ed25519'
+  }, null, 2));
+
+  const config = loadGitEnvShareConfig(dir);
+
+  assert.equal(config.encryptionKey, 'age');
+  assert.equal(config.sshKeyPath, '~/.ssh/id_ed25519');
 });
 
 test('prefers .git-env-share.config over package.json', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-config-'));
 
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
-    'git-env-share': { mode: 'age' }
+    'git-env-share': { encryptionKey: 'age' }
   }, null, 2));
   fs.writeFileSync(path.join(dir, '.git-env-share.config'), JSON.stringify({
-    mode: 'ssh', sshKeyPath: '~/.ssh/id_ed25519'
+    encryptionKey: 'ssh', sshKeyPath: '~/.ssh/id_ed25519'
   }, null, 2));
 
   const config = loadGitEnvShareConfig(dir);
 
-  assert.equal(config.mode, 'ssh');
+  assert.equal(config.encryptionKey, 'ssh');
   assert.equal(config.sshKeyPath, '~/.ssh/id_ed25519');
 });
 
@@ -82,7 +95,7 @@ test('resolves an existing private key from config', () => {
   fs.mkdirSync(path.dirname(keyPath), { recursive: true });
   fs.writeFileSync(keyPath, 'PRIVATE KEY');
 
-  const resolved = resolvePrivateKeyPath({ mode: 'ssh', sshKeyPath: keyPath }, dir);
+  const resolved = resolvePrivateKeyPath({ encryptionKey: 'ssh', sshKeyPath: keyPath }, dir);
 
   assert.equal(resolved, keyPath);
 });
@@ -93,13 +106,13 @@ test('detects explicit repo configuration before prompting for init', () => {
   assert.equal(hasExplicitConfig(dir), false);
 
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
-    'git-env-share': { mode: 'age' }
+    'git-env-share': { encryptionKey: 'age' }
   }, null, 2));
 
   assert.equal(hasExplicitConfig(dir), true);
 
   const secondDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-config-file-'));
-  fs.writeFileSync(path.join(secondDir, '.git-env-share.config'), JSON.stringify({ mode: 'ssh' }, null, 2));
+  fs.writeFileSync(path.join(secondDir, '.git-env-share.config'), JSON.stringify({ encryptionKey: 'ssh' }, null, 2));
 
   assert.equal(hasExplicitConfig(secondDir), true);
 });
@@ -111,7 +124,7 @@ test('rebuilds .agerecipients from githubUsernames when SSH mode is configured',
 
   fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
     'git-env-share': {
-      mode: 'ssh',
+      encryptionKey: 'ssh',
       githubUsernames: ['octocat']
     }
   }, null, 2));

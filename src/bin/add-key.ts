@@ -24,7 +24,7 @@ async function addKeyAndReencrypt() {
     const recipientsPath = path.join(rootDir, config.recipientsFile || '.agerecipients');
 
     let pubKey = process.argv[2];
-    const isSshMode = config.mode === 'ssh';
+    const isSshMode = config.encryptionKey === 'ssh';
 
     if (!pubKey) {
       if (isSshMode) {

@@ -80,7 +80,7 @@ integrationTest('installs the package and validates manual commands with mode gu
 
   // This is the repo-level config. We keep commit mode explicit to validate the default UX.
   fs.writeFileSync(path.join(repoDir, '.git-env-share.config'), JSON.stringify({
-    mode: 'age',
+    encryptionKey: 'age',
     ageKeyPath: '~/.age/key.txt',
     encryptionTrigger: 'commit'
   }, null, 2));
@@ -123,7 +123,7 @@ integrationTest('installs the package and validates manual commands with mode gu
 
   // Switch to manual mode and run setup again to apply the intended trigger strategy.
   fs.writeFileSync(path.join(repoDir, '.git-env-share.config'), JSON.stringify({
-    mode: 'age',
+    encryptionKey: 'age',
     ageKeyPath: '~/.age/key.txt',
     encryptionTrigger: 'manual'
   }, null, 2));

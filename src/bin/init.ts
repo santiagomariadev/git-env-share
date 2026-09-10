@@ -20,18 +20,18 @@ async function promptForConfig(): Promise<void> {
     return;
   }
 
-  const modeAnswer = await askBooleanQuestion('Use SSH mode instead of age mode?');
-  const mode = modeAnswer ? 'ssh' : 'age';
-  const encryptionTriggerAnswer = await askBooleanQuestion('Use manual encryption mode instead of commit-time encryption?');
+  const sshKeyAnswer = await askBooleanQuestion('Use SSH as the encryption key instead of age?');
+  const encryptionKey = sshKeyAnswer ? 'ssh' : 'age';
+  const encryptionTriggerAnswer = await askBooleanQuestion('Use manual encryption instead of commit-time encryption?');
   const config: GitEnvShareConfig = {
-    mode,
+    encryptionKey,
     encryptionTrigger: encryptionTriggerAnswer ? 'manual' : 'commit'
   };
 
-  if (mode === 'age') {
+  if (encryptionKey === 'age') {
     const ageKeyPath = await askQuestion('ageKeyPath (default: ~/.age/key.txt):');
     config.ageKeyPath = ageKeyPath && ageKeyPath.trim() !== '' ? ageKeyPath : '~/.age/key.txt';
-    console.log('Age mode selected. If you leave the path blank, a new keypair will be generated automatically.');
+    console.log('Age is selected as the encryption key. If you leave the path blank, a new keypair will be generated automatically.');
   } else {
     const sshKeyPath = await askQuestion('sshKeyPath (default: ~/.ssh/id_ed25519):');
     config.sshKeyPath = sshKeyPath && sshKeyPath.trim() !== '' ? sshKeyPath : '~/.ssh/id_ed25519';
@@ -58,8 +58,8 @@ async function promptForConfig(): Promise<void> {
 async function main() {
   await promptForConfig();
   const config = loadGitEnvShareConfig(process.cwd());
-  if (config.mode === 'ssh' && (!config.githubUsernames || config.githubUsernames.length === 0)) {
-    console.log('SSH mode selected without GitHub usernames. You can add them later to .git-env-share.config or package.json.');
+  if (config.encryptionKey === 'ssh' && (!config.githubUsernames || config.githubUsernames.length === 0)) {
+    console.log('SSH was selected as the encryption key without GitHub usernames. You can add them later to .git-env-share.config or package.json.');
   }
   await setup();
 }

@@ -29,24 +29,24 @@ Every team member should have the `age` CLI installed locally:
 
 2. Create or update the repo config in either `package.json` or `.git-env-share.config`.
 
-   Default `age` mode:
+   Default `age` encryption key:
 
    ```json
    {
      "git-env-share": {
-       "mode": "age",
+       "encryptionKey": "age",
        "ageKeyPath": "~/.age/key.txt",
        "encryptionTrigger": "commit"
      }
    }
    ```
 
-   SSH mode:
+   SSH encryption key:
 
    ```json
    {
      "git-env-share": {
-       "mode": "ssh",
+       "encryptionKey": "ssh",
        "sshKeyPath": "~/.ssh/id_ed25519",
        "githubUsernames": ["octocat"],
        "encryptionTrigger": "commit"
@@ -58,7 +58,7 @@ Every team member should have the `age` CLI installed locally:
 
    ```json
    {
-     "mode": "age",
+     "encryptionKey": "age",
      "ageKeyPath": "~/.age/key.txt",
      "encryptionTrigger": "commit"
    }
@@ -113,13 +113,13 @@ Notes:
 
 ### 1) New member joins the project
 
-If the project uses `age` mode, generate a private key if needed:
+If the project uses the `age` encryption key, generate a private key if needed:
 
 ```bash
 npx git-env-share-generate-key
 ```
 
-If the project uses `ssh` mode, ensure the teammate has a valid SSH key:
+If the project uses the `ssh` encryption key, ensure the teammate has a valid SSH key:
 
 ```bash
 ssh-keygen -t ed25519 -C "you@example.com"
@@ -127,7 +127,7 @@ ssh-keygen -t ed25519 -C "you@example.com"
 
 ### 2) Repo admin adds the new member
 
-In `age` mode, once the teammate shares their public key (`age1...`), run:
+Using the `age` encryption key, once the teammate shares their public key (`age1...`), run:
 
 ```bash
 npx git-env-share-add-key age1...
@@ -136,7 +136,7 @@ git commit -m "security: add team member key"
 git push
 ```
 
-In `ssh` mode, add the GitHub username instead:
+Using the `ssh` encryption key, add the GitHub username instead:
 
 ```bash
 npx git-env-share-add-github-user octocat
@@ -194,23 +194,23 @@ npx git-env-share-push-env -m "security: refresh encrypted env files"
 
 `git-env-share-push-env` stages encrypted files and then runs `git commit`. It does not run `git push`.
 
-Example config for manual mode:
+Example config for manual trigger:
 
 ```json
 {
   "git-env-share": {
-    "mode": "age",
+    "encryptionKey": "age",
     "encryptionTrigger": "manual"
   }
 }
 ```
 
-Example config for commit mode:
+Example config for commit trigger:
 
 ```json
 {
   "git-env-share": {
-    "mode": "age",
+    "encryptionKey": "age",
     "encryptionTrigger": "commit"
   }
 }
@@ -227,7 +227,7 @@ Use this when you want to move from one trigger strategy to the other.
    ```json
    {
      "git-env-share": {
-       "mode": "age",
+       "encryptionKey": "age",
        "encryptionTrigger": "commit"
      }
    }
@@ -254,7 +254,7 @@ Precautions:
    ```json
    {
      "git-env-share": {
-       "mode": "age",
+       "encryptionKey": "age",
        "encryptionTrigger": "manual"
      }
    }

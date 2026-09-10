@@ -103,13 +103,13 @@ async function generateAgeKeyPair(recipientsPath: string) {
   const config = loadGitEnvShareConfig(rootDir);
   const keyPath = resolvePrivateKeyPath(config, rootDir);
 
-  if (config.mode === 'ssh') {
+  if (config.encryptionKey === 'ssh') {
     if (fs.existsSync(keyPath || '')) {
       console.log(`✓ SSH private key already exists at ${keyPath}`);
       return;
     }
 
-    console.log(`\n🔑 SSH mode enabled. Ensure your private key exists at ${keyPath} and that your GitHub public key is authorized by the repository admin.`);
+    console.log(`\n🔑 SSH encryption enabled. Ensure your private key exists at ${keyPath} and that your GitHub public key is authorized by the repository admin.`);
     return;
   }
 
@@ -175,13 +175,13 @@ export async function setup() {
 
     const recipientsPath = configureGitAgeScripts(rootDir);
 
-    if (config.mode === 'ssh') {
-      console.log('✓ SSH mode is enabled. The project will expect GitHub SSH recipients to be listed in .agerecipients.');
+    if (config.encryptionKey === 'ssh') {
+      console.log('✓ SSH encryption is enabled. The project will expect GitHub SSH recipients to be listed in .agerecipients.');
       const syncedKeys = await syncGitHubRecipientsFromConfig(rootDir);
       if (syncedKeys.length > 0) {
         console.log(`✓ Synced ${syncedKeys.length} GitHub SSH key(s) into ${recipientsPath}.`);
       } else {
-        console.log(`✓ Rebuilt ${recipientsPath} for SSH mode. No GitHub usernames were configured.`);
+        console.log(`✓ Rebuilt ${recipientsPath} for SSH encryption. No GitHub usernames were configured.`);
       }
     } else {
       await generateAgeKeyPair(recipientsPath);

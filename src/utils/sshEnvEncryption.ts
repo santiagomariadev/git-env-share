@@ -56,7 +56,7 @@ export function getSshHostFromRemote(): string {
 
 export function resolveSshKeyPath(projectRoot = process.cwd()): string | null {
   const config = loadGitEnvShareConfig(projectRoot);
-  const keyPath = resolvePrivateKeyPath({ ...config, mode: 'ssh' }, projectRoot);
+  const keyPath = resolvePrivateKeyPath({ ...config, encryptionKey: 'ssh' }, projectRoot);
 
   if (keyPath && fs.existsSync(keyPath)) {
     return keyPath;
