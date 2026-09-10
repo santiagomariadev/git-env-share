@@ -12,6 +12,8 @@ export type EnvMigrationSafetyState = {
   partiallyStagedRawEnvFiles: string[];
 };
 
+const GITIGNORE_ENV_COMMENT = '# Missing .env files, added by git-env-share for security';
+
 export function ensureManualMode(rootDir: string): void {
   const config = loadGitEnvShareConfig(rootDir);
   if (config.encryptionTrigger !== ENCRYPTION_TRIGGERS.MANUAL) {
@@ -41,22 +43,11 @@ export function getEnvFilesAndUpdateGitIgnore(rootDir = process.cwd()): string[]
 
   const envFiles = listRootEnvFiles(rootDir);
 
-  let gitIgnoreContent = fs.readFileSync(gitIgnorePath, 'utf-8');
-  let updated = false;
+  const gitIgnoreContent = fs.readFileSync(gitIgnorePath, 'utf-8');
+  const updateResult = upsertGitIgnoreEnvEntries(gitIgnoreContent, envFiles);
 
-  if (!gitIgnoreContent.includes('# Missing .env files, added by git-env-share for security')) {
-    gitIgnoreContent += '\n# Missing .env files, added by git-env-share for security';
-  }
-
-  envFiles.forEach((file) => {
-    if (!gitIgnoreContent.match(new RegExp(`^${file}$`, 'm'))) {
-      gitIgnoreContent += `\n${file}`;
-      updated = true;
-    }
-  });
-
-  if (updated) {
-    fs.writeFileSync(gitIgnorePath, gitIgnoreContent);
+  if (updateResult.changed) {
+    fs.writeFileSync(gitIgnorePath, updateResult.content);
     console.log('✓ Updated .gitignore with missing .env files.');
   }
 
@@ -64,6 +55,38 @@ export function getEnvFilesAndUpdateGitIgnore(rootDir = process.cwd()): string[]
   gitAdd(gitIgnorePath);
 
   return envFiles;
+}
+
+function normalizeTextFile(content: string): string {
+  return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+export function upsertGitIgnoreEnvEntries(content: string, envFiles: string[]): { content: string; changed: boolean } {
+  const normalized = normalizeTextFile(content || '');
+  const lines = normalized.length > 0 ? normalized.split('\n') : [];
+  const normalizedLines = lines.map((line) => line.trim());
+  const lineSet = new Set(normalizedLines);
+  const outputLines = [...lines];
+  let changed = false;
+
+  if (!lineSet.has(GITIGNORE_ENV_COMMENT)) {
+    if (outputLines.length > 0 && outputLines[outputLines.length - 1].trim() !== '') {
+      outputLines.push('');
+    }
+    outputLines.push(GITIGNORE_ENV_COMMENT);
+    changed = true;
+  }
+
+  for (const file of envFiles) {
+    if (!lineSet.has(file)) {
+      outputLines.push(file);
+      lineSet.add(file);
+      changed = true;
+    }
+  }
+
+  const updated = outputLines.length > 0 ? `${outputLines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n` : '';
+  return { content: updated, changed };
 }
 
 function parseGitPathList(value: string): string[] {

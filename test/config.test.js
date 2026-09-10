@@ -7,10 +7,11 @@ const { execFileSync } = require('node:child_process');
 
 const { loadGitEnvShareConfig, resolvePrivateKeyPath, hasExplicitConfig, describeGitEnvShareConfig } = require('../dist/config');
 const { parseInitOptions } = require('../dist/bin/init');
-const { parseSetupOptions, configureManualModeHookState } = require('../dist/scripts/setup');
+const { parseSetupOptions, configureManualModeHookState, upsertSecretEnvGitAttributeRule } = require('../dist/scripts/setup');
 const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncryption');
 const { shouldSkipRemoteValidation } = require('../dist/utils/git');
 const { shouldRunPreCommitHook } = require('../dist/bin/pre-commit');
+const { upsertGitIgnoreEnvEntries } = require('../dist/utils/envWorkflow');
 const askQuestionModule = require('../dist/utils/askQuestion');
 
 const runIntegrationTests = process.env.GIT_ENV_SHARE_RUN_INTEGRATION === '1';
@@ -333,6 +334,53 @@ test('manual-mode migration leaves non-ges pre-commit hook unchanged', async () 
   await configureManualModeHookState(dir, false);
 
   assert.equal(fs.readFileSync(hookPath, 'utf-8'), original);
+});
+
+test('upsertSecretEnvGitAttributeRule appends canonical rule once and is idempotent', () => {
+  const original = '*.txt text\n';
+  const first = upsertSecretEnvGitAttributeRule(original);
+  const second = upsertSecretEnvGitAttributeRule(first.content);
+
+  assert.equal(first.changed, true);
+  assert.match(first.content, /# Encrypt environment files with git-env-share/);
+  assert.match(first.content, /\.secret\.env\*\s+filter=git-age/);
+  assert.equal(second.changed, false);
+
+  const ruleCount = first.content.split(/\r?\n/).filter((line) => line.includes('.secret.env*') && line.includes('filter=git-age')).length;
+  assert.equal(ruleCount, 1);
+});
+
+test('upsertSecretEnvGitAttributeRule treats existing compatible rule as already present', () => {
+  const original = '# existing\n.secret.env* text eol=lf filter=git-age\n';
+  const result = upsertSecretEnvGitAttributeRule(original);
+
+  assert.equal(result.changed, true);
+  const second = upsertSecretEnvGitAttributeRule(result.content);
+  assert.equal(second.changed, false);
+});
+
+test('upsertGitIgnoreEnvEntries adds comment and env entries without duplication', () => {
+  const original = 'node_modules\n';
+  const first = upsertGitIgnoreEnvEntries(original, ['.env', '.env.local']);
+  const second = upsertGitIgnoreEnvEntries(first.content, ['.env', '.env.local']);
+
+  assert.equal(first.changed, true);
+  assert.match(first.content, /# Missing \.env files, added by git-env-share for security/);
+  assert.match(first.content, /^\.env$/m);
+  assert.match(first.content, /^\.env\.local$/m);
+  assert.equal(second.changed, false);
+});
+
+test('upsertGitIgnoreEnvEntries handles regex-like names safely and avoids duplicate via trim', () => {
+  const original = '# Missing .env files, added by git-env-share for security\n.env.test  \n';
+  const result = upsertGitIgnoreEnvEntries(original, ['.env.test', '.env[qa]']);
+
+  assert.equal(result.changed, true);
+  const lines = result.content.split(/\r?\n/).filter(Boolean);
+  const envTestCount = lines.filter((line) => line.trim() === '.env.test').length;
+
+  assert.equal(envTestCount, 1);
+  assert.ok(lines.includes('.env[qa]'));
 });
 
 const integrationTest = runIntegrationTests ? test : test.skip;

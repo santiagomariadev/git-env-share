@@ -15,6 +15,9 @@ export type SetupOptions = {
   encryptionTrigger?: 'manual' | 'commit' | string;
 };
 
+const SECRET_ENV_RULE = '.secret.env* filter=git-age';
+const ATTRIBUTES_COMMENT = '# Encrypt environment files with git-env-share';
+
 export function parseSetupOptions(argv: string[] = process.argv.slice(2)): SetupOptions {
   const result: SetupOptions = { dryRun: false };
 
@@ -188,6 +191,45 @@ export async function configureManualModeHookState(gitHooksDir: string, dryRun =
   console.log('✓ Removed git-env-share command from existing pre-commit hook for manual mode.');
 }
 
+function normalizeTextFile(content: string): string {
+  return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
+export function upsertSecretEnvGitAttributeRule(content: string): { content: string; changed: boolean } {
+  const normalized = normalizeTextFile(content || '');
+  const lines = normalized.length > 0 ? normalized.split('\n') : [];
+  const hasRule = lines.some((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return false;
+
+    const tokens = trimmed.split(/\s+/).filter(Boolean);
+    if (tokens.length === 0 || tokens[0] !== '.secret.env*') return false;
+
+    return tokens.some((token) => token === 'filter=git-age');
+  });
+  const hasComment = lines.some((line) => line.trim() === ATTRIBUTES_COMMENT);
+
+  if (hasRule && hasComment) {
+    return { content: normalized.endsWith('\n') ? normalized : `${normalized}\n`, changed: false };
+  }
+
+  const outputLines = [...lines.filter((line) => line.length > 0 || lines.length === 0)];
+  if (outputLines.length > 0 && outputLines[outputLines.length - 1].trim() !== '') {
+    outputLines.push('');
+  }
+
+  if (!hasComment) {
+    outputLines.push(ATTRIBUTES_COMMENT);
+  }
+
+  if (!hasRule) {
+    outputLines.push(SECRET_ENV_RULE);
+  }
+
+  const updated = `${outputLines.join('\n')}\n`;
+  return { content: updated, changed: true };
+}
+
 function configureGitAgeScripts(rootDir: string, dryRun = false) {
   const recipientsPath = path.join(rootDir, '.agerecipients');
   const attributesPath = path.join(rootDir, '.gitattributes');
@@ -198,7 +240,7 @@ function configureGitAgeScripts(rootDir: string, dryRun = false) {
     console.log('  - filter.git-age.smudge = npx ges smudge %f');
     console.log('  - filter.git-age.required = true');
     console.log(`Preview: would ensure ${recipientsPath} exists and contains age public keys.`);
-    console.log(`Preview: would add ".secret.env* filter=git-age" to ${attributesPath} if it is not already present.`);
+    console.log(`Preview: would ensure "${SECRET_ENV_RULE}" exists in ${attributesPath}.`);
     return recipientsPath;
   }
 
@@ -211,22 +253,17 @@ function configureGitAgeScripts(rootDir: string, dryRun = false) {
     console.log('✓ Created .agerecipients file.');
   }
 
-  let attributesContent = fs.existsSync(attributesPath)
+  const existingAttributes = fs.existsSync(attributesPath)
     ? fs.readFileSync(attributesPath, 'utf-8')
     : '';
 
-  const envRules = ['.secret.env* filter=git-age'];
+  const upsertResult = upsertSecretEnvGitAttributeRule(existingAttributes);
 
-  if (!attributesContent.includes('filter=git-age')) {
-    const attributeLines = [
-      '',
-      '# Encrypt environment files with git-env-share',
-      ...envRules,
-      ''
-    ];
-    attributesContent += attributeLines.join('\n');
-    fs.writeFileSync(attributesPath, attributesContent);
-    console.log('✓ Added .secret.env* filter rule to .gitattributes');
+  if (upsertResult.changed) {
+    fs.writeFileSync(attributesPath, upsertResult.content);
+    console.log(`✓ Ensured ${SECRET_ENV_RULE} in .gitattributes`);
+  } else {
+    console.log(`✓ ${SECRET_ENV_RULE} already present in .gitattributes`);
   }
 
   console.log('✓ Successfully configured git-env-share filter drivers.');
@@ -308,6 +345,31 @@ async function generateAgeKeyPair(recipientsPath: string, dryRun = false) {
   }
 }
 
+function printSetupSummary(rootDir: string, recipientsPath: string, effectiveConfig: { encryptionKey?: string; encryptionTrigger?: string }): void {
+  const modeLabel = effectiveConfig.encryptionKey === ENCRYPTION_KEYS.SSH ? 'SSH' : 'Age';
+  const triggerLabel = effectiveConfig.encryptionTrigger === ENCRYPTION_TRIGGERS.MANUAL ? 'manual' : 'commit';
+
+  console.log('\n✅ Setup complete.');
+  console.log(`Active mode: ${modeLabel}`);
+  console.log(`Active trigger: ${triggerLabel}`);
+  console.log(`Recipients file: ${path.relative(rootDir, recipientsPath) || '.agerecipients'}`);
+  console.log('Repo expectations:');
+  console.log('  - Track encrypted .secret.env* files in Git.');
+  console.log('  - Keep raw .env* values local-only and untracked.');
+  console.log(`  - .gitattributes includes: ${SECRET_ENV_RULE}`);
+  console.log('Next commands:');
+
+  if (triggerLabel === ENCRYPTION_TRIGGERS.MANUAL) {
+    console.log('  1. npx ges stage');
+    console.log('  2. git commit -m "security: refresh encrypted env files"');
+    console.log('  3. npx ges push -m "security: refresh encrypted env files"  # optional one-step commit');
+  } else {
+    console.log('  1. Edit a local .env file');
+    console.log('  2. git add -f .env  # if .env is ignored and you want the commit hook to process changes');
+    console.log('  3. git commit -m "security: refresh encrypted env files"');
+  }
+}
+
 export async function setup(argv: string[] = process.argv.slice(2)) {
   try {
     const { gitHooksDir, rootDir } = getDirectories();
@@ -351,20 +413,8 @@ export async function setup(argv: string[] = process.argv.slice(2)) {
 
     warnAboutUnsafeRawEnvGitState(rootDir);
 
-    console.log('\n✅ git-env-share is configured.');
-    console.log(`Current setup: ${effectiveConfig.encryptionKey === ENCRYPTION_KEYS.SSH ? 'SSH' : 'Age'} encryption with ${effectiveConfig.encryptionTrigger === ENCRYPTION_TRIGGERS.MANUAL ? 'manual' : 'commit-time'} trigger.`);
-    console.log('Next steps:');
-    if (effectiveConfig.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT) {
-      console.log('  1. Share your public key or GitHub username with the repo admin.');
-      console.log('  2. Edit a local .env file and commit normally; the pre-commit hook will encrypt it before the commit succeeds.');
-      console.log('  3. Continue tracking only the encrypted .secret.* files, while raw .env values remain local-only.');
-    } else {
-      console.log('  1. Share your public key or GitHub username with the repo admin.');
-      console.log('  2. Run "npx ges stage" when you want to encrypt and stage the current .env files.');
-      console.log('  3. Run "npx ges push" to encrypt, stage, and commit in one command.');
-    }
-    console.log('');
-    console.log('Migration note: switching between commit and manual triggers only changes when encryption runs; it does not change the encrypted file naming or the Git filter setup.');
+    printSetupSummary(rootDir, recipientsPath, effectiveConfig);
+    console.log('Migration note: switching between commit and manual triggers only changes when encryption runs; encrypted file naming and filter wiring stay the same.');
   } catch {
     console.log('git-env-share: Not inside a Git repository. Skipping setup.');
   }
