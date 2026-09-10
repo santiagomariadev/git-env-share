@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { askBooleanQuestion } from '../utils/askQuestion';
 import { loadGitEnvShareConfig } from '../config';
+import { listRootEnvFiles } from '../utils/files';
 import { addGitHubUser } from '../utils/sshEnvEncryption';
 
 function readPublicKeyFromStdIn(query: string): Promise<string> {
@@ -64,8 +65,7 @@ export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
       console.log('✓ Added key to .agerecipients file.');
     }
 
-    const envList = spawnSync('sh', ['-c', 'ls .env* 2>/dev/null || true'], { encoding: 'utf-8' });
-    const envFiles = (envList.stdout || '').split('\n').filter(Boolean);
+    const envFiles = listRootEnvFiles(rootDir);
     const fileCount = envFiles.length;
 
     if (fileCount === 0) {

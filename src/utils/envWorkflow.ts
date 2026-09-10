@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ENCRYPTION_TRIGGERS } from '../config/defaults';
 import { loadGitEnvShareConfig } from '../config';
+import { listRootEnvFiles } from './files';
 import { getGitRoot, gitAdd, gitResetPaths, gitRestoreStaged } from './git';
 
 export function ensureManualMode(rootDir: string): void {
@@ -24,7 +25,7 @@ export function validateRecipients(rootDir: string): string {
   return recipientsPath;
 }
 
-export function getEnvFilesAndUpdateGitIgnore(): string[] {
+export function getEnvFilesAndUpdateGitIgnore(rootDir = process.cwd()): string[] {
   const gitIgnorePath = '.gitignore';
 
   if (!fs.existsSync(gitIgnorePath)) {
@@ -32,8 +33,7 @@ export function getEnvFilesAndUpdateGitIgnore(): string[] {
     console.log('✓ Created .gitignore file.');
   }
 
-  const ls = spawnSync('sh', ['-c', 'ls .env* 2>/dev/null || true'], { encoding: 'utf-8' });
-  const envFiles = (ls.stdout || '').split('\n').filter(Boolean);
+  const envFiles = listRootEnvFiles(rootDir);
 
   let gitIgnoreContent = fs.readFileSync(gitIgnorePath, 'utf-8');
   let updated = false;
@@ -101,7 +101,7 @@ export function stageEnvSecrets(rootDir = getGitRoot()): { envFiles: string[]; e
   process.chdir(rootDir);
 
   const recipientsPath = validateRecipients(rootDir);
-  const envFiles = getEnvFilesAndUpdateGitIgnore();
+  const envFiles = getEnvFilesAndUpdateGitIgnore(rootDir);
 
   let encryptedCount = 0;
   for (const relativePath of envFiles) {

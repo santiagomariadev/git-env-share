@@ -39,3 +39,12 @@ export function ensureSecureFile(filePath: string): void {
     fs.chmodSync(filePath, 0o600);
   }
 }
+
+export function listRootEnvFiles(projectRoot = process.cwd()): string[] {
+  const entries = fs.readdirSync(projectRoot, { withFileTypes: true });
+
+  return entries
+    .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && entry.name.startsWith('.env'))
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right));
+}
