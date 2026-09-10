@@ -7,6 +7,7 @@ import { askBooleanQuestion } from '../utils/askQuestion';
 import { ensureSecureDirectory, ensureSecureFile } from '../utils/files';
 import { getGitHooksDir, getGitRoot } from '../utils/git';
 import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
+import { warnAboutUnsafeRawEnvGitState } from '../utils/envWorkflow';
 import { syncGitHubRecipientsFromConfig } from '../utils/sshEnvEncryption';
 
 export type SetupOptions = {
@@ -15,7 +16,7 @@ export type SetupOptions = {
 };
 
 export function parseSetupOptions(argv: string[] = process.argv.slice(2)): SetupOptions {
-  const result: SetupOptions = { dryRun: false, encryptionTrigger: ENCRYPTION_TRIGGERS.COMMIT };
+  const result: SetupOptions = { dryRun: false };
 
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index];
@@ -40,7 +41,9 @@ export function parseSetupOptions(argv: string[] = process.argv.slice(2)): Setup
     }
   }
 
-  if (result.encryptionTrigger !== ENCRYPTION_TRIGGERS.MANUAL && result.encryptionTrigger !== ENCRYPTION_TRIGGERS.COMMIT) {
+  if (result.encryptionTrigger
+    && result.encryptionTrigger !== ENCRYPTION_TRIGGERS.MANUAL
+    && result.encryptionTrigger !== ENCRYPTION_TRIGGERS.COMMIT) {
     result.encryptionTrigger = ENCRYPTION_TRIGGERS.COMMIT;
   }
 
@@ -121,6 +124,68 @@ async function configureGitHooks(gitHooksDir: string, dryRun = false) {
   const updatedContent = `${existingContent}\n\n# Added by git-env-share\n${hookCommand}\n`;
   fs.writeFileSync(precommitHookPath, updatedContent, { mode: 0o755 });
   console.log('✓ Appended git-env-share pre-commit hook');
+}
+
+export function stripGitEnvShareHookLines(content: string): string {
+  return content
+    .split(/\r?\n/)
+    .filter((line) => {
+      const trimmed = line.trim();
+      return trimmed !== 'npx ges precommit' && trimmed !== '# Added by git-env-share' && trimmed !== '# git-env-share pre-commit hook';
+    })
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trimEnd() + '\n';
+}
+
+export function isManagedByGitEnvShareOnly(content: string): boolean {
+  const remaining = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .filter((line) => line !== '#!/bin/sh' && line !== 'npx ges precommit' && line !== '# Added by git-env-share' && line !== '# git-env-share pre-commit hook');
+
+  return remaining.length === 0;
+}
+
+export async function configureManualModeHookState(gitHooksDir: string, dryRun = false) {
+  const precommitHookPath = path.join(gitHooksDir, 'pre-commit');
+
+  if (!fs.existsSync(precommitHookPath)) {
+    return;
+  }
+
+  const existingContent = fs.readFileSync(precommitHookPath, 'utf-8');
+  if (!existingContent.includes('npx ges precommit')) {
+    return;
+  }
+
+  const managedOnly = isManagedByGitEnvShareOnly(existingContent);
+  if (dryRun) {
+    if (managedOnly) {
+      console.log(`Preview: would remove ${precommitHookPath} because manual mode does not require the git-env-share pre-commit hook.`);
+      return;
+    }
+
+    console.log(`Preview: would remove "npx ges precommit" from ${precommitHookPath} so manual mode does not run commit-time encryption.`);
+    return;
+  }
+
+  if (managedOnly) {
+    fs.unlinkSync(precommitHookPath);
+    console.log('✓ Removed git-env-share pre-commit hook for manual mode.');
+    return;
+  }
+
+  console.log('⚠ Manual mode was selected, but an existing pre-commit hook still contains "npx ges precommit".');
+  const shouldRemove = await askBooleanQuestion('Remove only the git-env-share line and keep the rest of the hook?');
+  if (!shouldRemove) {
+    console.log('Kept existing hook unchanged. Commit-time hook logic may still run until you remove that line manually.');
+    return;
+  }
+
+  fs.writeFileSync(precommitHookPath, stripGitEnvShareHookLines(existingContent), { mode: 0o755 });
+  console.log('✓ Removed git-env-share command from existing pre-commit hook for manual mode.');
 }
 
 function configureGitAgeScripts(rootDir: string, dryRun = false) {
@@ -252,6 +317,10 @@ export async function setup(argv: string[] = process.argv.slice(2)) {
 
     await confirmSetup(options.dryRun);
 
+    if (effectiveConfig.encryptionTrigger === ENCRYPTION_TRIGGERS.MANUAL) {
+      await configureManualModeHookState(gitHooksDir, options.dryRun);
+    }
+
     if (effectiveConfig.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT) {
       await configureGitHooks(gitHooksDir, options.dryRun);
     }
@@ -275,9 +344,12 @@ export async function setup(argv: string[] = process.argv.slice(2)) {
     }
 
     if (options.dryRun) {
+      warnAboutUnsafeRawEnvGitState(rootDir);
       console.log('\nPreview complete. No files were modified. Run the same command without --dry-run to apply these changes.');
       return;
     }
+
+    warnAboutUnsafeRawEnvGitState(rootDir);
 
     console.log('\n✅ git-env-share is configured.');
     console.log(`Current setup: ${effectiveConfig.encryptionKey === ENCRYPTION_KEYS.SSH ? 'SSH' : 'Age'} encryption with ${effectiveConfig.encryptionTrigger === ENCRYPTION_TRIGGERS.MANUAL ? 'manual' : 'commit-time'} trigger.`);

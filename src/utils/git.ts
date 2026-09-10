@@ -44,7 +44,7 @@ export function getGitHooksDir(): string {
 
 export function getRemoteGitUrl(): string | null {
   try {
-    const remoteUrl = execGit('config --get remote.origin.url || echo ""').trim();
+    const remoteUrl = execGit(['config', '--get', 'remote.origin.url']).trim();
     return remoteUrl || null;
   } catch {
     return null;

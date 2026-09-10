@@ -7,10 +7,11 @@ const { execFileSync } = require('node:child_process');
 
 const { loadGitEnvShareConfig, resolvePrivateKeyPath, hasExplicitConfig, describeGitEnvShareConfig } = require('../dist/config');
 const { parseInitOptions } = require('../dist/bin/init');
-const { parseSetupOptions } = require('../dist/scripts/setup');
+const { parseSetupOptions, configureManualModeHookState } = require('../dist/scripts/setup');
 const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncryption');
 const { shouldSkipRemoteValidation } = require('../dist/utils/git');
 const { shouldRunPreCommitHook } = require('../dist/bin/pre-commit');
+const askQuestionModule = require('../dist/utils/askQuestion');
 
 const runIntegrationTests = process.env.GIT_ENV_SHARE_RUN_INTEGRATION === '1';
 
@@ -166,7 +167,7 @@ test('parses dry-run preview flags for setup', () => {
 
   const defaults = parseSetupOptions([]);
   assert.equal(defaults.dryRun, false);
-  assert.equal(defaults.encryptionTrigger, 'commit');
+  assert.equal(defaults.encryptionTrigger, undefined);
 });
 
 test('rebuilds .agerecipients from githubUsernames when SSH mode is configured', async () => {
@@ -239,6 +240,99 @@ test('pre-commit hook respects encryption trigger mode', () => {
 
   assert.equal(shouldRunPreCommitHook(manualDir), false);
   assert.equal(shouldRunPreCommitHook(commitDir), true);
+});
+
+test('manual-mode migration removes pre-commit hook when it is only ges-managed', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-hook-only-'));
+  const hookPath = path.join(dir, 'pre-commit');
+
+  fs.writeFileSync(hookPath, '#!/bin/sh\n# git-env-share pre-commit hook\n\nnpx ges precommit\n', { mode: 0o755 });
+
+  await configureManualModeHookState(dir, false);
+
+  assert.equal(fs.existsSync(hookPath), false);
+});
+
+test('manual-mode migration removes only ges command from shared pre-commit hook when confirmed', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-hook-shared-confirm-'));
+  const hookPath = path.join(dir, 'pre-commit');
+
+  const original = [
+    '#!/bin/sh',
+    'echo "run lint"',
+    '# Added by git-env-share',
+    'npx ges precommit',
+    'echo "run tests"',
+    ''
+  ].join('\n');
+
+  fs.writeFileSync(hookPath, original, { mode: 0o755 });
+
+  const originalAskBoolean = askQuestionModule.askBooleanQuestion;
+  askQuestionModule.askBooleanQuestion = async () => true;
+
+  try {
+    await configureManualModeHookState(dir, false);
+  } finally {
+    askQuestionModule.askBooleanQuestion = originalAskBoolean;
+  }
+
+  const updated = fs.readFileSync(hookPath, 'utf-8');
+  assert.match(updated, /run lint/);
+  assert.match(updated, /run tests/);
+  assert.doesNotMatch(updated, /npx\s+ges\s+precommit/);
+  assert.doesNotMatch(updated, /# Added by git-env-share/);
+});
+
+test('manual-mode migration keeps shared pre-commit hook unchanged when removal is declined', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-hook-shared-decline-'));
+  const hookPath = path.join(dir, 'pre-commit');
+
+  const original = [
+    '#!/bin/sh',
+    'echo "run lint"',
+    '# Added by git-env-share',
+    'npx ges precommit',
+    ''
+  ].join('\n');
+
+  fs.writeFileSync(hookPath, original, { mode: 0o755 });
+
+  const originalAskBoolean = askQuestionModule.askBooleanQuestion;
+  askQuestionModule.askBooleanQuestion = async () => false;
+
+  try {
+    await configureManualModeHookState(dir, false);
+  } finally {
+    askQuestionModule.askBooleanQuestion = originalAskBoolean;
+  }
+
+  assert.equal(fs.readFileSync(hookPath, 'utf-8'), original);
+});
+
+test('manual-mode migration dry-run does not modify pre-commit hook content', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-hook-dry-run-'));
+  const hookPath = path.join(dir, 'pre-commit');
+
+  const original = '#!/bin/sh\n# git-env-share pre-commit hook\n\nnpx ges precommit\n';
+  fs.writeFileSync(hookPath, original, { mode: 0o755 });
+
+  await configureManualModeHookState(dir, true);
+
+  assert.equal(fs.existsSync(hookPath), true);
+  assert.equal(fs.readFileSync(hookPath, 'utf-8'), original);
+});
+
+test('manual-mode migration leaves non-ges pre-commit hook unchanged', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-hook-no-ges-'));
+  const hookPath = path.join(dir, 'pre-commit');
+
+  const original = '#!/bin/sh\necho "custom hook"\n';
+  fs.writeFileSync(hookPath, original, { mode: 0o755 });
+
+  await configureManualModeHookState(dir, false);
+
+  assert.equal(fs.readFileSync(hookPath, 'utf-8'), original);
 });
 
 const integrationTest = runIntegrationTests ? test : test.skip;

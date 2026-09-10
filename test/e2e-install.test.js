@@ -37,6 +37,100 @@ function runCommandResult(command, args, options = {}) {
   });
 }
 
+function writeRepoConfig(repoDir, config) {
+  fs.writeFileSync(path.join(repoDir, '.git-env-share.config'), JSON.stringify(config, null, 2));
+}
+
+function runReconfigure(repoDir, env, input = 'y\n') {
+  const result = spawnSync('script', ['-qec', 'npx ges reconfigure', '/dev/null'], {
+    cwd: repoDir,
+    env,
+    input,
+    encoding: 'utf-8'
+  });
+
+  if (result.status !== 0) {
+    throw new Error(`ges reconfigure failed:\n${result.stderr || result.stdout || ''}`);
+  }
+}
+
+function assertCommitContainsEncryptedSecrets(repoDir, env) {
+  const latestChanged = runCommand('git', ['show', '--name-only', '--pretty=', 'HEAD'], { cwd: repoDir, env });
+  const secretBlob = runCommand('git', ['show', ':./.secret.env'], { cwd: repoDir, env });
+
+  assert.ok(latestChanged.includes('.secret.env'));
+  assert.match(secretBlob, /^age-encryption\.org\/v1/m);
+  assert.ok(!latestChanged.includes('.env\n'));
+}
+
+function createFakeSshBinary(tempRoot) {
+  const fakeBinDir = path.join(tempRoot, 'fake-bin');
+  fs.mkdirSync(fakeBinDir, { recursive: true });
+  const fakeSshPath = path.join(fakeBinDir, 'ssh');
+
+  fs.writeFileSync(fakeSshPath, '#!/usr/bin/env sh\necho "You\'ve successfully authenticated"\nexit 1\n');
+  fs.chmodSync(fakeSshPath, 0o755);
+
+  return fakeBinDir;
+}
+
+function bootstrapConsumerWorkspace(tempRoot, initialConfig, options = {}) {
+  const projectRoot = path.resolve(__dirname, '..');
+  const homeDir = path.join(tempRoot, 'home');
+  const repoDir = path.join(tempRoot, 'repo');
+
+  fs.mkdirSync(homeDir, { recursive: true });
+  fs.mkdirSync(repoDir, { recursive: true });
+  fs.mkdirSync(path.join(homeDir, '.age'), { recursive: true });
+  fs.mkdirSync(path.join(homeDir, '.ssh'), { recursive: true });
+
+  const baseEnv = {
+    ...process.env,
+    HOME: homeDir,
+    XDG_CONFIG_HOME: path.join(homeDir, '.config'),
+    GIT_CONFIG_GLOBAL: path.join(homeDir, '.gitconfig')
+  };
+
+  const fakeSshBin = options.useFakeSsh ? createFakeSshBinary(tempRoot) : null;
+  const env = fakeSshBin
+    ? { ...baseEnv, PATH: `${fakeSshBin}:${process.env.PATH || ''}` }
+    : baseEnv;
+
+  const tarballName = runCommand('npm', ['pack', '--pack-destination', tempRoot], { cwd: projectRoot, env });
+  const tarballPath = path.join(tempRoot, tarballName.split(/\r?\n/).pop());
+
+  const ageKeyPath = path.join(homeDir, '.age', 'key.txt');
+  runCommand('age-keygen', ['-o', ageKeyPath], { env });
+  const agePublicKey = runCommand('age-keygen', ['-y', ageKeyPath], { env });
+
+  const sshKeyPath = path.join(homeDir, '.ssh', 'id_ed25519');
+  runCommand('ssh-keygen', ['-t', 'ed25519', '-N', '', '-f', sshKeyPath], { env });
+  const sshPublicKey = fs.readFileSync(`${sshKeyPath}.pub`, 'utf-8').trim();
+
+  runCommand('git', ['init', '-b', 'main'], { cwd: repoDir, env });
+  runCommand('git', ['config', 'user.name', 'Test User'], { cwd: repoDir, env });
+  runCommand('git', ['config', 'user.email', 'test@example.com'], { cwd: repoDir, env });
+
+  if (options.useFakeSsh) {
+    runCommand('git', ['remote', 'add', 'origin', 'git@github.com:example/repo.git'], { cwd: repoDir, env });
+  }
+
+  fs.writeFileSync(path.join(repoDir, 'package.json'), JSON.stringify({
+    name: 'consumer-workspace',
+    private: true,
+    devDependencies: {
+      'git-env-share': `file:${tarballPath}`
+    }
+  }, null, 2));
+
+  writeRepoConfig(repoDir, initialConfig);
+  fs.writeFileSync(path.join(repoDir, '.agerecipients'), `${agePublicKey}\n`);
+
+  runCommand('npm', ['install'], { cwd: repoDir, env });
+
+  return { repoDir, homeDir, env, agePublicKey, ageKeyPath, sshPublicKey, sshKeyPath };
+}
+
 integrationTest('installs the package and validates manual commands with mode guardrails', () => {
   const projectRoot = path.resolve(__dirname, '..');
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-e2e-'));
@@ -118,8 +212,8 @@ integrationTest('installs the package and validates manual commands with mode gu
 
   assert.notEqual(stageInCommitMode.status, 0);
   assert.notEqual(pushInCommitMode.status, 0);
-  assert.match((stageInCommitMode.stderr || '') + (stageInCommitMode.stdout || ''), /manual mode/i);
-  assert.match((pushInCommitMode.stderr || '') + (pushInCommitMode.stdout || ''), /manual mode/i);
+  assert.match((stageInCommitMode.stderr || '') + (stageInCommitMode.stdout || ''), /only available.+manual/i);
+  assert.match((pushInCommitMode.stderr || '') + (pushInCommitMode.stdout || ''), /only available.+manual/i);
 
   // Switch to manual mode and run setup again to apply the intended trigger strategy.
   fs.writeFileSync(path.join(repoDir, '.git-env-share.config'), JSON.stringify({
@@ -184,4 +278,119 @@ integrationTest('installs the package and validates manual commands with mode gu
   // Raw env files remain local working-tree files and are not tracked directly.
   assert.equal(fs.readFileSync(envFilePath, 'utf-8'), 'HELLO=updated\n');
   assert.equal(fs.readFileSync(devEnvFilePath, 'utf-8'), originalDevEnv);
+});
+
+integrationTest('migration path: commit trigger -> encrypted commit -> switch to manual -> encrypted commit', () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-e2e-commit-to-manual-'));
+  const { repoDir, env, ageKeyPath } = bootstrapConsumerWorkspace(tempRoot, {
+    encryptionKey: 'age',
+    ageKeyPath: '~/.age/key.txt',
+    encryptionTrigger: 'commit'
+  }, { useFakeSsh: true });
+
+  runReconfigure(repoDir, env);
+
+  const envFilePath = path.join(repoDir, '.env');
+  fs.writeFileSync(envFilePath, 'APP_MODE=commit-phase\n');
+  runCommand('git', ['add', '-f', '.env'], { cwd: repoDir, env });
+  runCommand('git', ['commit', '-m', 'security: commit trigger encrypted update'], { cwd: repoDir, env });
+  assertCommitContainsEncryptedSecrets(repoDir, env);
+
+  const hookPath = path.join(repoDir, '.git', 'hooks', 'pre-commit');
+  assert.equal(fs.existsSync(hookPath), true);
+
+  writeRepoConfig(repoDir, {
+    encryptionKey: 'age',
+    ageKeyPath: '~/.age/key.txt',
+    encryptionTrigger: 'manual'
+  });
+
+  runReconfigure(repoDir, env);
+  assert.equal(fs.existsSync(hookPath), false);
+
+  fs.writeFileSync(envFilePath, 'APP_MODE=manual-phase\n');
+  runCommand('npx', ['ges', 'push', '-m', 'security: manual trigger encrypted update'], { cwd: repoDir, env });
+  assertCommitContainsEncryptedSecrets(repoDir, env);
+  assert.equal(runCommand('git', ['ls-files', '.env'], { cwd: repoDir, env }), '');
+});
+
+integrationTest('migration path: manual trigger -> multiple encrypted commits -> switch to commit -> encrypted commit', () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-e2e-manual-to-commit-'));
+  const { repoDir, env, ageKeyPath } = bootstrapConsumerWorkspace(tempRoot, {
+    encryptionKey: 'age',
+    ageKeyPath: '~/.age/key.txt',
+    encryptionTrigger: 'manual'
+  }, { useFakeSsh: true });
+
+  runReconfigure(repoDir, env);
+
+  const envFilePath = path.join(repoDir, '.env');
+  fs.writeFileSync(envFilePath, 'ROLLING=one\n');
+  runCommand('npx', ['ges', 'push', '-m', 'security: manual encrypted one'], { cwd: repoDir, env });
+
+  fs.writeFileSync(envFilePath, 'ROLLING=two\n');
+  runCommand('npx', ['ges', 'push', '-m', 'security: manual encrypted two'], { cwd: repoDir, env });
+
+  const hookPath = path.join(repoDir, '.git', 'hooks', 'pre-commit');
+  assert.equal(fs.existsSync(hookPath), false);
+
+  writeRepoConfig(repoDir, {
+    encryptionKey: 'age',
+    ageKeyPath: '~/.age/key.txt',
+    encryptionTrigger: 'commit'
+  });
+
+  runReconfigure(repoDir, env);
+  assert.equal(fs.existsSync(hookPath), true);
+
+  fs.writeFileSync(envFilePath, 'ROLLING=three\n');
+  runCommand('git', ['add', '-f', '.env'], { cwd: repoDir, env });
+  runCommand('git', ['commit', '-m', 'security: commit trigger encrypted three'], { cwd: repoDir, env });
+  assertCommitContainsEncryptedSecrets(repoDir, env);
+});
+
+integrationTest('migration path: age key -> ssh key -> age key keeps encrypted commits working', () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-e2e-key-switch-'));
+  const { repoDir, env, agePublicKey, sshPublicKey } = bootstrapConsumerWorkspace(tempRoot, {
+    encryptionKey: 'age',
+    ageKeyPath: '~/.age/key.txt',
+    encryptionTrigger: 'manual'
+  });
+
+  runReconfigure(repoDir, env);
+
+  const envFilePath = path.join(repoDir, '.env');
+  fs.writeFileSync(envFilePath, 'ENC_KEY=age-initial\n');
+  runCommand('npx', ['ges', 'push', '-m', 'security: age mode encrypted update'], { cwd: repoDir, env });
+  assertCommitContainsEncryptedSecrets(repoDir, env);
+
+  writeRepoConfig(repoDir, {
+    encryptionKey: 'ssh',
+    sshKeyPath: '~/.ssh/id_ed25519',
+    encryptionTrigger: 'manual'
+  });
+  runReconfigure(repoDir, env);
+  runCommand('npx', ['ges', 'add-ssh-key', sshPublicKey], { cwd: repoDir, env });
+
+  fs.writeFileSync(envFilePath, 'ENC_KEY=ssh-phase\n');
+  runCommand('npx', ['ges', 'push', '-m', 'security: ssh mode encrypted update'], { cwd: repoDir, env });
+  assertCommitContainsEncryptedSecrets(repoDir, env);
+
+  const recipientsAfterSsh = fs.readFileSync(path.join(repoDir, '.agerecipients'), 'utf-8');
+  assert.match(recipientsAfterSsh, /ssh-ed25519|ssh-rsa|ecdsa-sha2/);
+
+  writeRepoConfig(repoDir, {
+    encryptionKey: 'age',
+    ageKeyPath: '~/.age/key.txt',
+    encryptionTrigger: 'manual'
+  });
+  runReconfigure(repoDir, env);
+  fs.writeFileSync(path.join(repoDir, '.agerecipients'), `${agePublicKey}\n`);
+
+  fs.writeFileSync(envFilePath, 'ENC_KEY=age-final\n');
+  runCommand('npx', ['ges', 'push', '-m', 'security: age mode encrypted final'], { cwd: repoDir, env });
+  assertCommitContainsEncryptedSecrets(repoDir, env);
+
+  const recipientsAfterAge = fs.readFileSync(path.join(repoDir, '.agerecipients'), 'utf-8');
+  assert.match(recipientsAfterAge, /^age1/m);
 });

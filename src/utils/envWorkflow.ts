@@ -4,7 +4,13 @@ import * as path from 'node:path';
 import { ENCRYPTION_TRIGGERS } from '../config/defaults';
 import { loadGitEnvShareConfig } from '../config';
 import { listRootEnvFiles } from './files';
-import { getGitRoot, gitAdd, gitResetPaths, gitRestoreStaged } from './git';
+import { execGit, getGitRoot, gitAdd, gitResetPaths, gitRestoreStaged } from './git';
+
+export type EnvMigrationSafetyState = {
+  trackedRawEnvFiles: string[];
+  stagedRawEnvFiles: string[];
+  partiallyStagedRawEnvFiles: string[];
+};
 
 export function ensureManualMode(rootDir: string): void {
   const config = loadGitEnvShareConfig(rootDir);
@@ -60,6 +66,64 @@ export function getEnvFilesAndUpdateGitIgnore(rootDir = process.cwd()): string[]
   return envFiles;
 }
 
+function parseGitPathList(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function isRawEnvPath(filePath: string): boolean {
+  return filePath.startsWith('.env');
+}
+
+function isSecretEnvPath(filePath: string): boolean {
+  return filePath.startsWith('.secret.env');
+}
+
+function collectRawEnvFiles(paths: string[]): string[] {
+  return paths
+    .filter((item) => isRawEnvPath(item) && !isSecretEnvPath(item))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+export function getEnvMigrationSafetyState(rootDir = getGitRoot()): EnvMigrationSafetyState {
+  const stagedPaths = collectRawEnvFiles(parseGitPathList(execGit(['diff', '--cached', '--name-only'])));
+  const trackedPaths = collectRawEnvFiles(parseGitPathList(execGit(['ls-files'])));
+  const changedPaths = new Set(collectRawEnvFiles(parseGitPathList(execGit(['diff', '--name-only']))));
+  const partiallyStagedPaths = stagedPaths.filter((file) => changedPaths.has(file));
+
+  return {
+    trackedRawEnvFiles: trackedPaths,
+    stagedRawEnvFiles: stagedPaths,
+    partiallyStagedRawEnvFiles: partiallyStagedPaths
+  };
+}
+
+export function warnAboutUnsafeRawEnvGitState(rootDir = getGitRoot()): EnvMigrationSafetyState {
+  const state = getEnvMigrationSafetyState(rootDir);
+
+  if (state.trackedRawEnvFiles.length > 0) {
+    console.log('⚠ Safety warning: raw .env files are tracked in Git.');
+    console.log(`  Tracked raw files: ${state.trackedRawEnvFiles.join(', ')}`);
+    console.log('  Recommendation: remove these files from the index (git rm --cached <file>) and keep only .secret.* files tracked.');
+  }
+
+  if (state.stagedRawEnvFiles.length > 0) {
+    console.log('⚠ Safety warning: raw .env files are currently staged.');
+    console.log(`  Staged raw files: ${state.stagedRawEnvFiles.join(', ')}`);
+    console.log('  Recommendation: run "git restore --staged <file>" before committing.');
+  }
+
+  if (state.partiallyStagedRawEnvFiles.length > 0) {
+    console.log('⚠ Safety warning: raw .env files are partially staged (staged + unstaged changes).');
+    console.log(`  Partially staged raw files: ${state.partiallyStagedRawEnvFiles.join(', ')}`);
+    console.log('  Recommendation: unstage raw files and use "npx ges stage" or commit-mode hooks to regenerate encrypted outputs from the latest content.');
+  }
+
+  return state;
+}
+
 export function secureEnvFile(rootDir: string, envFilePath: string, recipientsPath: string): void {
   const fullPath = path.join(rootDir, envFilePath);
 
@@ -99,6 +163,8 @@ export function secureEnvFile(rootDir: string, envFilePath: string, recipientsPa
 
 export function stageEnvSecrets(rootDir = getGitRoot()): { envFiles: string[]; encryptedCount: number; recipientsPath: string } {
   process.chdir(rootDir);
+
+  warnAboutUnsafeRawEnvGitState(rootDir);
 
   const recipientsPath = validateRecipients(rootDir);
   const envFiles = getEnvFilesAndUpdateGitIgnore(rootDir);

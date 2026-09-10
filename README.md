@@ -276,6 +276,14 @@ Example config for commit trigger:
 
 Use this when you want to move from one trigger strategy to the other.
 
+Before switching either way:
+
+- run `git status` and review staged files
+- avoid switching while a merge/rebase/cherry-pick is unresolved
+- if raw `.env*` files are tracked or staged, clean them first (`git rm --cached .env*` and `git restore --staged .env*` as needed)
+
+`npx ges reconfigure` now performs migration safety checks and warns when raw `.env*` files are tracked, staged, or partially staged.
+
 ### From `manual` to `commit` (recommended default)
 
 1. Update the repo config:
@@ -296,6 +304,11 @@ Use this when you want to move from one trigger strategy to the other.
    ```
 
 3. Commit as usual. The hook will encrypt `.env*` content into `.secret.env*` before the commit succeeds.
+
+Automation details:
+
+- `npx ges reconfigure` ensures the `npx ges precommit` hook entry is present
+- if a hook already exists, it appends the entry instead of replacing existing logic
 
 Precautions:
 
@@ -322,13 +335,11 @@ Precautions:
    npx ges reconfigure
    ```
 
-3. Remove or disable the old pre-commit hook if you no longer want commit-time encryption:
+3. Reconfigure handles hook migration automatically:
 
-   ```bash
-   rm .git/hooks/pre-commit
-   ```
-
-   If the hook was previously appended rather than replaced, keep the existing script and remove only the git-env-share line you added.
+- if the hook file is only git-env-share, it removes it
+- if the hook is shared with other logic, it offers to remove only `npx ges precommit`
+- if you keep the line, commit-time encryption may still run until you remove it manually
 
 4. From then on, use `ges stage` (or `ges push`) whenever you want to refresh encrypted artifacts.
 
