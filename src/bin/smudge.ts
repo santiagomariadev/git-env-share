@@ -8,7 +8,7 @@ import { writeFileAtomic } from '../utils/files';
 function getGitRootOrNull(projectRoot: string): string | null {
   const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
     cwd: projectRoot,
-    encoding: 'utf-8'
+    encoding: 'utf-8',
   });
 
   if (result.status !== 0) {
@@ -22,7 +22,7 @@ function getGitRootOrNull(projectRoot: string): string | null {
 function isMergeLikeOperationInProgress(projectRoot: string): boolean {
   const gitDirResult = spawnSync('git', ['rev-parse', '--git-dir'], {
     cwd: projectRoot,
-    encoding: 'utf-8'
+    encoding: 'utf-8',
   });
 
   if (gitDirResult.status !== 0) {
@@ -36,9 +36,11 @@ function isMergeLikeOperationInProgress(projectRoot: string): boolean {
 
   const resolvedGitDir = path.isAbsolute(gitDir) ? gitDir : path.join(projectRoot, gitDir);
 
-  return fs.existsSync(path.join(resolvedGitDir, 'MERGE_HEAD'))
-    || fs.existsSync(path.join(resolvedGitDir, 'REBASE_HEAD'))
-    || fs.existsSync(path.join(resolvedGitDir, 'CHERRY_PICK_HEAD'));
+  return (
+    fs.existsSync(path.join(resolvedGitDir, 'MERGE_HEAD')) ||
+    fs.existsSync(path.join(resolvedGitDir, 'REBASE_HEAD')) ||
+    fs.existsSync(path.join(resolvedGitDir, 'CHERRY_PICK_HEAD'))
+  );
 }
 
 function toGitRelativePath(projectRoot: string, filePath: string): string {
@@ -48,7 +50,7 @@ function toGitRelativePath(projectRoot: string, filePath: string): string {
 function isPathTracked(projectRoot: string, relativePath: string): boolean {
   const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', relativePath], {
     cwd: projectRoot,
-    encoding: 'utf-8'
+    encoding: 'utf-8',
   });
 
   return tracked.status === 0;
@@ -58,7 +60,7 @@ function writeBlob(projectRoot: string, content: Buffer): string | null {
   const result = spawnSync('git', ['hash-object', '-w', '--stdin'], {
     cwd: projectRoot,
     input: content,
-    encoding: 'utf-8'
+    encoding: 'utf-8',
   });
 
   if (result.status !== 0) {
@@ -73,7 +75,7 @@ export function tryMarkTrackedPathAsConflict(
   projectRoot: string,
   filePath: string,
   localContent: Buffer,
-  remoteContent: Buffer
+  remoteContent: Buffer,
 ): boolean {
   const gitRoot = getGitRootOrNull(projectRoot);
   if (!gitRoot || !isMergeLikeOperationInProgress(gitRoot)) {
@@ -98,13 +100,13 @@ export function tryMarkTrackedPathAsConflict(
     `100644 ${baseSha} 1\t${relativePath}`,
     `100644 ${localSha} 2\t${relativePath}`,
     `100644 ${remoteSha} 3\t${relativePath}`,
-    ''
+    '',
   ].join('\n');
 
   const update = spawnSync('git', ['update-index', '--index-info'], {
     cwd: gitRoot,
     input: indexInfo,
-    encoding: 'utf-8'
+    encoding: 'utf-8',
   });
 
   return update.status === 0;
@@ -118,20 +120,23 @@ export function runSmudge(argv = process.argv.slice(2)) {
 
   if (!keyPath || !fs.existsSync(keyPath)) {
     console.error('✕ Private key is missing or unreadable.');
-    console.error(`Update your ${config.encryptionKey === 'ssh' ? 'SSH' : 'age'} key setting in the project config or run the matching key-generation command.`);
+    console.error(
+      `Update your ${config.encryptionKey === 'ssh' ? 'SSH' : 'age'} key setting in the project config or run the matching key-generation command.`,
+    );
     process.exit(1);
   }
 
   const ageProcess = spawnSync('age', ['-d', '-i', keyPath], {
     input: fs.readFileSync(0),
-    maxBuffer: 1024 * 1024 * 50
+    maxBuffer: 1024 * 1024 * 50,
   });
 
   if (ageProcess.status !== 0) {
     console.error('✕ Decryption failed.');
-    const guidanceMessage = config.encryptionKey === 'ssh'
-      ? 'Ensure your SSH private key matches the GitHub public key authorized for this repository.'
-      : 'Run "npx ges generate-key" to generate your age keypair and share the public key with your repository admin.';
+    const guidanceMessage =
+      config.encryptionKey === 'ssh'
+        ? 'Ensure your SSH private key matches the GitHub public key authorized for this repository.'
+        : 'Run "npx ges generate-key" to generate your age keypair and share the public key with your repository admin.';
     console.error(guidanceMessage);
     process.exit(1);
   }
@@ -152,7 +157,7 @@ export function runSmudge(argv = process.argv.slice(2)) {
         console.warn(`Incoming remote changes differ from your local ${envFileName}.`);
         const diffProcess = spawnSync('diff', ['-u', envFilePath, '-'], {
           input: decryptedContent,
-          maxBuffer: 1024 * 1024 * 50
+          maxBuffer: 1024 * 1024 * 50,
         });
 
         if (diffProcess.status === 0) {
@@ -163,12 +168,17 @@ export function runSmudge(argv = process.argv.slice(2)) {
             envContent,
             Buffer.from('=======\n'),
             decryptedContent,
-            Buffer.from('>>>>>>> REMOTE VERSION\n')
+            Buffer.from('>>>>>>> REMOTE VERSION\n'),
           ]);
           writeFileAtomic(envFilePath, conflictContent);
           outputContent = conflictContent;
 
-          const markedAsConflict = tryMarkTrackedPathAsConflict(projectRoot, envFilePath, envContent, decryptedContent);
+          const markedAsConflict = tryMarkTrackedPathAsConflict(
+            projectRoot,
+            envFilePath,
+            envContent,
+            decryptedContent,
+          );
           if (markedAsConflict) {
             console.warn('Git index conflict state was updated for this file.');
           }

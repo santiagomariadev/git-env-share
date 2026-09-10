@@ -31,16 +31,25 @@ export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
 
     if (!pubKey) {
       if (isSshMode) {
-        pubKey = await readPublicKeyFromStdIn('Enter the SSH public key to authorize for this repo (ssh-..., ecdsa-..., or sk-...):\n');
+        pubKey = await readPublicKeyFromStdIn(
+          'Enter the SSH public key to authorize for this repo (ssh-..., ecdsa-..., or sk-...):\n',
+        );
       } else {
         pubKey = await readPublicKeyFromStdIn("Enter the new member's age public key (age1...):\n");
       }
     }
 
-    if (isSshMode && !pubKey.startsWith('ssh-') && !pubKey.startsWith('ecdsa-') && !pubKey.startsWith('sk-')) {
+    if (
+      isSshMode &&
+      !pubKey.startsWith('ssh-') &&
+      !pubKey.startsWith('ecdsa-') &&
+      !pubKey.startsWith('sk-')
+    ) {
       const addedKeys = await addGitHubUser(pubKey, { recipientsPath });
       if (addedKeys && addedKeys.length > 0) {
-        console.log(`✓ Added ${addedKeys.length} GitHub SSH key(s) for @${pubKey} to ${recipientsPath}`);
+        console.log(
+          `✓ Added ${addedKeys.length} GitHub SSH key(s) for @${pubKey} to ${recipientsPath}`,
+        );
       }
       return;
     }
@@ -51,7 +60,9 @@ export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
     }
 
     if (isSshMode && !/^ssh-|^ecdsa-|^sk-/.test(pubKey)) {
-      console.error('✕ Invalid SSH recipient format. Expected a raw SSH public key (ssh-..., ecdsa-..., or sk-...).');
+      console.error(
+        '✕ Invalid SSH recipient format. Expected a raw SSH public key (ssh-..., ecdsa-..., or sk-...).',
+      );
       process.exit(1);
     }
 
@@ -90,14 +101,23 @@ export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
         return;
       }
 
-      console.log(`\nThis will re-encrypt ${fileCount} environment file(s) and stage the updated .secret files.`);
-      const shouldProceed = await askBooleanQuestion('Do you want to continue with the re-encryption?');
+      console.log(
+        `\nThis will re-encrypt ${fileCount} environment file(s) and stage the updated .secret files.`,
+      );
+      const shouldProceed = await askBooleanQuestion(
+        'Do you want to continue with the re-encryption?',
+      );
       if (!shouldProceed) {
         console.log('Re-encryption cancelled. No files were rewritten.');
         return;
       }
 
-      const encryptedOutputs: Array<{ relativeEnvPath: string; secretFilePath: string; secretFileName: string; output: Buffer }> = [];
+      const encryptedOutputs: {
+        relativeEnvPath: string;
+        secretFilePath: string;
+        secretFileName: string;
+        output: Buffer;
+      }[] = [];
 
       for (const relativeEnvPath of envFiles) {
         const fullPath = path.join(rootDir, relativeEnvPath);
@@ -113,11 +133,14 @@ export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
         const plainData = fs.readFileSync(fullPath);
         const ageProcess = spawnSync('age', ['-R', recipientsPathForEncryption, '-e'], {
           input: plainData,
-          maxBuffer: 1024 * 1024 * 50
+          maxBuffer: 1024 * 1024 * 50,
         });
 
         if (ageProcess.status !== 0) {
-          console.error(`✕ Re-encryption failed for ${relativeEnvPath}:`, ageProcess.stderr?.toString());
+          console.error(
+            `✕ Re-encryption failed for ${relativeEnvPath}:`,
+            ageProcess.stderr?.toString(),
+          );
           process.exit(1);
         }
 
@@ -125,7 +148,7 @@ export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
           relativeEnvPath,
           secretFilePath,
           secretFileName,
-          output: ageProcess.stdout
+          output: ageProcess.stdout,
         });
       }
 
@@ -142,8 +165,12 @@ export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
 
       spawnSync('git', ['add', recipientsPath], { stdio: 'inherit' });
 
-      console.log(`\n✓ Successfully re-encrypted ${encryptedOutputs.length} secret file(s) and staged .agerecipients!`);
-      console.log('> Run "git commit -m "security: add new team member key"" to complete onboarding.');
+      console.log(
+        `\n✓ Successfully re-encrypted ${encryptedOutputs.length} secret file(s) and staged .agerecipients!`,
+      );
+      console.log(
+        '> Run "git commit -m "security: add new team member key"" to complete onboarding.',
+      );
     } finally {
       if (tempRecipientsPath && fs.existsSync(tempRecipientsPath)) {
         fs.unlinkSync(tempRecipientsPath);

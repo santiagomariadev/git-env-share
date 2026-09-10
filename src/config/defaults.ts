@@ -1,11 +1,11 @@
 export const ENCRYPTION_KEYS = {
   AGE: 'age',
-  SSH: 'ssh'
+  SSH: 'ssh',
 } as const;
 
 export const ENCRYPTION_TRIGGERS = {
   COMMIT: 'commit',
-  MANUAL: 'manual'
+  MANUAL: 'manual',
 } as const;
 
 export const VALID_ENCRYPTION_KEYS = Object.freeze(Object.values(ENCRYPTION_KEYS));
@@ -13,7 +13,8 @@ export const VALID_ENCRYPTION_TRIGGERS = Object.freeze(Object.values(ENCRYPTION_
 export const VALID_MODES = VALID_ENCRYPTION_KEYS;
 
 export type GitEnvShareEncryptionKey = (typeof ENCRYPTION_KEYS)[keyof typeof ENCRYPTION_KEYS];
-export type GitEnvShareEncryptionTrigger = (typeof ENCRYPTION_TRIGGERS)[keyof typeof ENCRYPTION_TRIGGERS];
+export type GitEnvShareEncryptionTrigger =
+  (typeof ENCRYPTION_TRIGGERS)[keyof typeof ENCRYPTION_TRIGGERS];
 
 export const DEFAULT_CONFIG: Readonly<{
   encryptionKey: GitEnvShareEncryptionKey;
@@ -32,10 +33,10 @@ export const DEFAULT_CONFIG: Readonly<{
   recipientsFile: '.agerecipients',
   enabled: true,
   paused: false,
-  encryptionTrigger: ENCRYPTION_TRIGGERS.COMMIT
+  encryptionTrigger: ENCRYPTION_TRIGGERS.COMMIT,
 });
 
-export type GitEnvShareConfig = {
+export interface GitEnvShareConfig {
   encryptionKey?: GitEnvShareEncryptionKey | string;
   ageKeyPath?: string;
   sshKeyPath?: string;
@@ -47,4 +48,4 @@ export type GitEnvShareConfig = {
   paused?: boolean;
   encryptionTrigger?: GitEnvShareEncryptionTrigger | string;
   [key: string]: unknown;
-};
+}

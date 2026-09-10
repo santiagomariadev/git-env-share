@@ -8,18 +8,20 @@ import { ensureRecipientsFile, resolveRecipientsPath } from './recipientsFile';
 import { normalizeLineEndings } from './text';
 import { execGit, getGitRoot, gitAdd, gitResetPaths, gitRestoreStaged } from './git';
 
-export type EnvMigrationSafetyState = {
+export interface EnvMigrationSafetyState {
   trackedRawEnvFiles: string[];
   stagedRawEnvFiles: string[];
   partiallyStagedRawEnvFiles: string[];
-};
+}
 
 const GITIGNORE_ENV_COMMENT = '# Missing .env files, added by git-env-share for security';
 
 export function ensureManualMode(rootDir: string): void {
   const config = loadGitEnvShareConfig(rootDir);
   if (config.encryptionTrigger !== ENCRYPTION_TRIGGERS.MANUAL) {
-    throw new Error('This command is only available when "encryptionTrigger" is set to "manual". Update your repo config and run setup again.');
+    throw new Error(
+      'This command is only available when "encryptionTrigger" is set to "manual". Update your repo config and run setup again.',
+    );
   }
 }
 
@@ -29,7 +31,10 @@ export function validateRecipients(rootDir: string): string {
 
   if (!fs.existsSync(recipientsPath)) {
     ensureRecipientsFile(recipientsPath, '# Add age or SSH public keys (one per line)\n');
-    console.log('✓ Created recipients file for the configured encryption key:', config.encryptionKey);
+    console.log(
+      '✓ Created recipients file for the configured encryption key:',
+      config.encryptionKey,
+    );
   }
 
   return recipientsPath;
@@ -59,7 +64,10 @@ export function getEnvFilesAndUpdateGitIgnore(rootDir = process.cwd()): string[]
   return envFiles;
 }
 
-export function upsertGitIgnoreEnvEntries(content: string, envFiles: string[]): { content: string; changed: boolean } {
+export function upsertGitIgnoreEnvEntries(
+  content: string,
+  envFiles: string[],
+): { content: string; changed: boolean } {
   const normalized = normalizeLineEndings(content || '');
   const lines = normalized.length > 0 ? normalized.split('\n') : [];
   const normalizedLines = lines.map((line) => line.trim());
@@ -83,7 +91,13 @@ export function upsertGitIgnoreEnvEntries(content: string, envFiles: string[]): 
     }
   }
 
-  const updated = outputLines.length > 0 ? `${outputLines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd()}\n` : '';
+  const updated =
+    outputLines.length > 0
+      ? `${outputLines
+          .join('\n')
+          .replace(/\n{3,}/g, '\n\n')
+          .trimEnd()}\n`
+      : '';
   return { content: updated, changed };
 }
 
@@ -108,16 +122,20 @@ function collectRawEnvFiles(paths: string[]): string[] {
     .sort((left, right) => left.localeCompare(right));
 }
 
-export function getEnvMigrationSafetyState(rootDir = getGitRoot()): EnvMigrationSafetyState {
-  const stagedPaths = collectRawEnvFiles(parseGitPathList(execGit(['diff', '--cached', '--name-only'])));
+export function getEnvMigrationSafetyState(_rootDir = getGitRoot()): EnvMigrationSafetyState {
+  const stagedPaths = collectRawEnvFiles(
+    parseGitPathList(execGit(['diff', '--cached', '--name-only'])),
+  );
   const trackedPaths = collectRawEnvFiles(parseGitPathList(execGit(['ls-files'])));
-  const changedPaths = new Set(collectRawEnvFiles(parseGitPathList(execGit(['diff', '--name-only']))));
+  const changedPaths = new Set(
+    collectRawEnvFiles(parseGitPathList(execGit(['diff', '--name-only']))),
+  );
   const partiallyStagedPaths = stagedPaths.filter((file) => changedPaths.has(file));
 
   return {
     trackedRawEnvFiles: trackedPaths,
     stagedRawEnvFiles: stagedPaths,
-    partiallyStagedRawEnvFiles: partiallyStagedPaths
+    partiallyStagedRawEnvFiles: partiallyStagedPaths,
   };
 }
 
@@ -127,7 +145,9 @@ export function warnAboutUnsafeRawEnvGitState(rootDir = getGitRoot()): EnvMigrat
   if (state.trackedRawEnvFiles.length > 0) {
     console.log('⚠ Safety warning: raw .env files are tracked in Git.');
     console.log(`  Tracked raw files: ${state.trackedRawEnvFiles.join(', ')}`);
-    console.log('  Recommendation: remove these files from the index (git rm --cached <file>) and keep only .secret.* files tracked.');
+    console.log(
+      '  Recommendation: remove these files from the index (git rm --cached <file>) and keep only .secret.* files tracked.',
+    );
   }
 
   if (state.stagedRawEnvFiles.length > 0) {
@@ -137,9 +157,13 @@ export function warnAboutUnsafeRawEnvGitState(rootDir = getGitRoot()): EnvMigrat
   }
 
   if (state.partiallyStagedRawEnvFiles.length > 0) {
-    console.log('⚠ Safety warning: raw .env files are partially staged (staged + unstaged changes).');
+    console.log(
+      '⚠ Safety warning: raw .env files are partially staged (staged + unstaged changes).',
+    );
     console.log(`  Partially staged raw files: ${state.partiallyStagedRawEnvFiles.join(', ')}`);
-    console.log('  Recommendation: unstage raw files and use "npx ges stage" or commit-mode hooks to regenerate encrypted outputs from the latest content.');
+    console.log(
+      '  Recommendation: unstage raw files and use "npx ges stage" or commit-mode hooks to regenerate encrypted outputs from the latest content.',
+    );
   }
 
   return state;
@@ -167,7 +191,7 @@ export function secureEnvFile(rootDir: string, envFilePath: string, recipientsPa
   const envContent = fs.readFileSync(fullPath);
   const ageProcess = spawnSync('age', ['-R', recipientsPath, '-e'], {
     input: envContent,
-    maxBuffer: 1024 * 1024 * 50
+    maxBuffer: 1024 * 1024 * 50,
   });
 
   if (ageProcess.status !== 0) {
@@ -182,7 +206,11 @@ export function secureEnvFile(rootDir: string, envFilePath: string, recipientsPa
   console.log(`✓ Encrypted & Staged: ${relativeSecretPath}`);
 }
 
-export function stageEnvSecrets(rootDir = getGitRoot()): { envFiles: string[]; encryptedCount: number; recipientsPath: string } {
+export function stageEnvSecrets(rootDir = getGitRoot()): {
+  envFiles: string[];
+  encryptedCount: number;
+  recipientsPath: string;
+} {
   process.chdir(rootDir);
 
   warnAboutUnsafeRawEnvGitState(rootDir);

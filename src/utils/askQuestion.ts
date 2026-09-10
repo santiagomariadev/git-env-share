@@ -15,7 +15,7 @@ export async function askBooleanQuestion(query: string): Promise<boolean> {
 
   const rl = readline.createInterface({
     input: inputSource,
-    output: process.stdout
+    output: process.stdout,
   });
 
   return new Promise((resolve) => {
@@ -27,7 +27,10 @@ export async function askBooleanQuestion(query: string): Promise<boolean> {
   });
 }
 
-export async function askQuestion(query: string, answerProcessor?: (answer: string) => string): Promise<string> {
+export async function askQuestion(
+  query: string,
+  answerProcessor?: (answer: string) => string,
+): Promise<string> {
   let inputSource: NodeJS.ReadStream | NodeJS.ReadableStream = process.stdin;
 
   try {
@@ -41,7 +44,7 @@ export async function askQuestion(query: string, answerProcessor?: (answer: stri
 
   const rl = readline.createInterface({
     input: inputSource,
-    output: process.stdout
+    output: process.stdout,
   });
 
   return new Promise((resolve) => {

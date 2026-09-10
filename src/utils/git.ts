@@ -1,12 +1,19 @@
 import { spawnSync } from 'node:child_process';
 
-export function shouldSkipRemoteValidation(remoteUrl: string | null | undefined, config?: { enabled?: boolean; paused?: boolean }): boolean {
+export function shouldSkipRemoteValidation(
+  remoteUrl: string | null | undefined,
+  config?: { enabled?: boolean; paused?: boolean },
+): boolean {
   if (!remoteUrl) return true;
   if (config && config.enabled === false) return true;
   if (config && config.paused) return true;
 
   const normalized = remoteUrl.trim();
-  return normalized.startsWith('http://') || normalized.startsWith('https://') || normalized.startsWith('git://');
+  return (
+    normalized.startsWith('http://') ||
+    normalized.startsWith('https://') ||
+    normalized.startsWith('git://')
+  );
 }
 
 function normalizeGitArgs(args: string[] | string): string[] {
@@ -15,12 +22,15 @@ function normalizeGitArgs(args: string[] | string): string[] {
   return args.trim().split(/\s+/).filter(Boolean);
 }
 
-export function execGit(args: string[] | string, options: { stdio?: 'pipe' | 'inherit' | 'ignore' | Array<'pipe' | 'inherit' | 'ignore'> } = {}): string {
+export function execGit(
+  args: string[] | string,
+  options: { stdio?: 'pipe' | 'inherit' | 'ignore' | ('pipe' | 'inherit' | 'ignore')[] } = {},
+): string {
   const normalizedArgs = normalizeGitArgs(args);
   const result = spawnSync('git', normalizedArgs, {
     encoding: 'utf-8',
     stdio: options.stdio || 'pipe',
-    ...options
+    ...options,
   });
 
   if (result.error) {
@@ -51,7 +61,7 @@ export function getRemoteGitUrl(): string | null {
   }
 }
 
-export function gitAdd(...paths: Array<string | string[] | undefined | null>): void {
+export function gitAdd(...paths: (string | string[] | undefined | null)[]): void {
   const items = paths.filter(Boolean).flatMap((value) => {
     if (Array.isArray(value)) return value.filter(Boolean);
     return [value as string];
@@ -61,7 +71,7 @@ export function gitAdd(...paths: Array<string | string[] | undefined | null>): v
   execGit(['add', ...items]);
 }
 
-export function gitRestoreStaged(...paths: Array<string | string[] | undefined | null>): void {
+export function gitRestoreStaged(...paths: (string | string[] | undefined | null)[]): void {
   const items = paths.filter(Boolean).flatMap((value) => {
     if (Array.isArray(value)) return value.filter(Boolean);
     return [value as string];
@@ -76,7 +86,7 @@ export function gitRestoreStaged(...paths: Array<string | string[] | undefined |
   }
 }
 
-export function gitResetPaths(...paths: Array<string | string[] | undefined | null>): void {
+export function gitResetPaths(...paths: (string | string[] | undefined | null)[]): void {
   const items = paths.filter(Boolean).flatMap((value) => {
     if (Array.isArray(value)) return value.filter(Boolean);
     return [value as string];

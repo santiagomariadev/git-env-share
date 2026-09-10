@@ -19,7 +19,9 @@ async function generateKey() {
     ensureSecureKeyLocation(keyDir, keyPath);
 
     if (!fs.existsSync(keyPath)) {
-      const answer = await askBooleanQuestion('No Age private key was found in ~/.age/key.txt. Generate one now?');
+      const answer = await askBooleanQuestion(
+        'No Age private key was found in ~/.age/key.txt. Generate one now?',
+      );
       if (!answer) {
         console.log('Key generation cancelled.');
         return;
@@ -44,7 +46,14 @@ async function generateKey() {
         spawnSync('sh', ['-c', `printf '%s' "${publicKey}" | pbcopy`], { stdio: 'ignore' });
         console.log('📋 Public key copied to clipboard!');
       } else if (process.platform === 'linux') {
-        spawnSync('sh', ['-c', `printf '%s' "${publicKey}" | xclip -selection clipboard 2>/dev/null || printf '%s' "${publicKey}" | xsel -b 2>/dev/null`], { stdio: 'ignore' });
+        spawnSync(
+          'sh',
+          [
+            '-c',
+            `printf '%s' "${publicKey}" | xclip -selection clipboard 2>/dev/null || printf '%s' "${publicKey}" | xsel -b 2>/dev/null`,
+          ],
+          { stdio: 'ignore' },
+        );
         console.log('📋 Public key copied to clipboard!');
       } else if (process.platform === 'win32') {
         spawnSync('cmd', ['/c', `echo ${publicKey}| clip`], { stdio: 'ignore' });

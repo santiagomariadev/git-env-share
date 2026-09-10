@@ -17,7 +17,10 @@ export function resolveHomeRelativePath(value: string | undefined): string | und
   return value;
 }
 
-export function resolveConfigPath(value: string | undefined, projectRoot = process.cwd()): string | null {
+export function resolveConfigPath(
+  value: string | undefined,
+  projectRoot = process.cwd(),
+): string | null {
   if (!value || typeof value !== 'string') return null;
 
   const normalized = resolveHomeRelativePath(value);

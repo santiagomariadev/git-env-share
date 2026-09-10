@@ -16,9 +16,16 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit --pretty false",
+    "lint": "eslint src --ext .ts --max-warnings=0",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run lint && npm run format:check && npm run typecheck",
     "prepack": "npm run build",
     "test": "npm run build && node --test test/*.test.js",
-    "test:ci": "GIT_ENV_SHARE_RUN_INTEGRATION=1 npm test"
+    "test:ci": "GIT_ENV_SHARE_RUN_INTEGRATION=1 npm test",
+    "ci": "npm run check && npm test"
   },
   "repository": {
     "type": "git",
@@ -38,7 +45,13 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "@eslint/js": "^9.17.0",
     "@types/node": "^22.10.2",
-    "typescript": "^5.7.3"
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^10.0.0",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.18.0"
   }
 }

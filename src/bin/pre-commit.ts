@@ -7,7 +7,11 @@ import { getEnvFilesAndUpdateGitIgnore, stageEnvSecrets } from '../utils/envWork
 
 export function shouldRunPreCommitHook(projectRoot = process.cwd()): boolean {
   const config = loadGitEnvShareConfig(projectRoot);
-  return config.enabled !== false && !config.paused && config.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT;
+  return (
+    config.enabled !== false &&
+    !config.paused &&
+    config.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT
+  );
 }
 
 function resolveSshHostFromRemote(remoteUrl: string): string | null {
@@ -41,15 +45,12 @@ function verifyGitAccess(remoteUrl: string) {
     process.exit(1);
   }
 
-  const sshCheck = spawnSync('ssh', [
-    '-T',
-    '-o',
-    'BatchMode=yes',
-    host
-  ], { encoding: 'utf-8' });
+  const sshCheck = spawnSync('ssh', ['-T', '-o', 'BatchMode=yes', host], { encoding: 'utf-8' });
 
   if (sshCheck.status === 255) {
-    console.error('✕ Git Access Denied: SSH connection failed. Please check your SSH keys and configuration.');
+    console.error(
+      '✕ Git Access Denied: SSH connection failed. Please check your SSH keys and configuration.',
+    );
     process.exit(1);
   }
 
@@ -67,14 +68,18 @@ export function runPreCommit() {
     const config = loadGitEnvShareConfig(rootDir);
 
     if (!shouldRunPreCommitHook(rootDir)) {
-      console.log('git-env-share: pre-commit hook skipped because paused or encryptionTrigger is not "commit".');
+      console.log(
+        'git-env-share: pre-commit hook skipped because paused or encryptionTrigger is not "commit".',
+      );
       return;
     }
 
     const gitRemoteUrl = getRemoteGitUrl();
 
     if (!gitRemoteUrl) {
-      console.log('⚠ No remote URL found. Fallback to checking for .env files and updating .gitignore only.');
+      console.log(
+        '⚠ No remote URL found. Fallback to checking for .env files and updating .gitignore only.',
+      );
       getEnvFilesAndUpdateGitIgnore();
       return;
     }

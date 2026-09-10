@@ -5,9 +5,18 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const { loadGitEnvShareConfig, resolvePrivateKeyPath, hasExplicitConfig, describeGitEnvShareConfig } = require('../dist/config');
+const {
+  loadGitEnvShareConfig,
+  resolvePrivateKeyPath,
+  hasExplicitConfig,
+  describeGitEnvShareConfig,
+} = require('../dist/config');
 const { parseInitOptions } = require('../dist/bin/init');
-const { parseSetupOptions, configureManualModeHookState, upsertSecretEnvGitAttributeRule } = require('../dist/scripts/setup');
+const {
+  parseSetupOptions,
+  configureManualModeHookState,
+  upsertSecretEnvGitAttributeRule,
+} = require('../dist/scripts/setup');
 const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncryption');
 const { shouldSkipRemoteValidation } = require('../dist/utils/git');
 const { shouldRunPreCommitHook } = require('../dist/bin/pre-commit');
@@ -29,8 +38,14 @@ function writeFilterScripts(sharedRoot) {
   const encryptScript = path.join(sharedRoot, 'encrypt-env.sh');
   const decryptScript = path.join(sharedRoot, 'decrypt-env.sh');
 
-  fs.writeFileSync(encryptScript, '#!/usr/bin/env bash\ninput=$(cat)\nprintf "encrypted:%s" "$input"\n');
-  fs.writeFileSync(decryptScript, '#!/usr/bin/env bash\ninput=$(cat)\nprintf "%s" "${input#encrypted:}"\n');
+  fs.writeFileSync(
+    encryptScript,
+    '#!/usr/bin/env bash\ninput=$(cat)\nprintf "encrypted:%s" "$input"\n',
+  );
+  fs.writeFileSync(
+    decryptScript,
+    '#!/usr/bin/env bash\ninput=$(cat)\nprintf "%s" "${input#encrypted:}"\n',
+  );
 
   fs.chmodSync(encryptScript, 0o755);
   fs.chmodSync(decryptScript, 0o755);
@@ -54,9 +69,16 @@ function initRepoWithFilter(repoRoot, encryptScript, decryptScript) {
 test('reads config from package.json with age as default', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-package-'));
 
-  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
-    'git-env-share': { encryptionKey: 'age', ageKeyPath: '~/.age/key.txt' }
-  }, null, 2));
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify(
+      {
+        'git-env-share': { encryptionKey: 'age', ageKeyPath: '~/.age/key.txt' },
+      },
+      null,
+      2,
+    ),
+  );
 
   const config = loadGitEnvShareConfig(dir);
 
@@ -67,9 +89,17 @@ test('reads config from package.json with age as default', () => {
 test('falls back to the age default when encryptionKey is invalid', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-invalid-key-'));
 
-  fs.writeFileSync(path.join(dir, '.git-env-share.config'), JSON.stringify({
-    encryptionKey: 'invalid', sshKeyPath: '~/.ssh/id_ed25519'
-  }, null, 2));
+  fs.writeFileSync(
+    path.join(dir, '.git-env-share.config'),
+    JSON.stringify(
+      {
+        encryptionKey: 'invalid',
+        sshKeyPath: '~/.ssh/id_ed25519',
+      },
+      null,
+      2,
+    ),
+  );
 
   const config = loadGitEnvShareConfig(dir);
 
@@ -80,12 +110,27 @@ test('falls back to the age default when encryptionKey is invalid', () => {
 test('prefers .git-env-share.config over package.json', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-config-'));
 
-  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
-    'git-env-share': { encryptionKey: 'age' }
-  }, null, 2));
-  fs.writeFileSync(path.join(dir, '.git-env-share.config'), JSON.stringify({
-    encryptionKey: 'ssh', sshKeyPath: '~/.ssh/id_ed25519'
-  }, null, 2));
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify(
+      {
+        'git-env-share': { encryptionKey: 'age' },
+      },
+      null,
+      2,
+    ),
+  );
+  fs.writeFileSync(
+    path.join(dir, '.git-env-share.config'),
+    JSON.stringify(
+      {
+        encryptionKey: 'ssh',
+        sshKeyPath: '~/.ssh/id_ed25519',
+      },
+      null,
+      2,
+    ),
+  );
 
   const config = loadGitEnvShareConfig(dir);
 
@@ -110,14 +155,24 @@ test('detects explicit repo configuration before prompting for init', () => {
 
   assert.equal(hasExplicitConfig(dir), false);
 
-  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
-    'git-env-share': { encryptionKey: 'age' }
-  }, null, 2));
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify(
+      {
+        'git-env-share': { encryptionKey: 'age' },
+      },
+      null,
+      2,
+    ),
+  );
 
   assert.equal(hasExplicitConfig(dir), true);
 
   const secondDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-config-file-'));
-  fs.writeFileSync(path.join(secondDir, '.git-env-share.config'), JSON.stringify({ encryptionKey: 'ssh' }, null, 2));
+  fs.writeFileSync(
+    path.join(secondDir, '.git-env-share.config'),
+    JSON.stringify({ encryptionKey: 'ssh' }, null, 2),
+  );
 
   assert.equal(hasExplicitConfig(secondDir), true);
 });
@@ -125,7 +180,7 @@ test('detects explicit repo configuration before prompting for init', () => {
 test('describes the current configuration in plain-language setup guidance', () => {
   const config = loadGitEnvShareConfig(process.cwd(), {
     encryptionKey: 'ssh',
-    encryptionTrigger: 'manual'
+    encryptionTrigger: 'manual',
   });
 
   const summary = describeGitEnvShareConfig(config);
@@ -177,12 +232,19 @@ test('rebuilds .agerecipients from githubUsernames when SSH mode is configured',
   const recipientsPath = path.join(dir, '.agerecipients');
   const sshPublicKey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIexampleuser';
 
-  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({
-    'git-env-share': {
-      encryptionKey: 'ssh',
-      githubUsernames: ['octocat']
-    }
-  }, null, 2));
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify(
+      {
+        'git-env-share': {
+          encryptionKey: 'ssh',
+          githubUsernames: ['octocat'],
+        },
+      },
+      null,
+      2,
+    ),
+  );
 
   fs.writeFileSync(recipientsPath, '# old age key\nage1oldrecipient\n');
 
@@ -210,7 +272,7 @@ test('rebuilds .agerecipients from githubUsernames when SSH mode is configured',
     assert.ok(!fileContents.includes('age1oldrecipient'));
     assert.ok(fileContents.startsWith('# Auto-generated by git-env-share for SSH mode'));
   } finally {
-    await new Promise((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }
 });
 
@@ -225,7 +287,10 @@ test('skips SSH validation for HTTPS remotes and honors config opt-out', () => {
   assert.equal(config.paused, false);
   assert.equal(config.encryptionTrigger, 'commit');
 
-  const disabledConfig = loadGitEnvShareConfig(dir, { enabled: false, encryptionTrigger: 'manual' });
+  const disabledConfig = loadGitEnvShareConfig(dir, {
+    enabled: false,
+    encryptionTrigger: 'manual',
+  });
   assert.equal(disabledConfig.enabled, false);
   assert.equal(disabledConfig.encryptionTrigger, 'manual');
 
@@ -235,10 +300,16 @@ test('skips SSH validation for HTTPS remotes and honors config opt-out', () => {
 
 test('pre-commit hook respects encryption trigger mode', () => {
   const manualDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-manual-hook-'));
-  fs.writeFileSync(path.join(manualDir, '.git-env-share.config'), JSON.stringify({ encryptionTrigger: 'manual' }, null, 2));
+  fs.writeFileSync(
+    path.join(manualDir, '.git-env-share.config'),
+    JSON.stringify({ encryptionTrigger: 'manual' }, null, 2),
+  );
 
   const commitDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-commit-hook-'));
-  fs.writeFileSync(path.join(commitDir, '.git-env-share.config'), JSON.stringify({ encryptionTrigger: 'commit' }, null, 2));
+  fs.writeFileSync(
+    path.join(commitDir, '.git-env-share.config'),
+    JSON.stringify({ encryptionTrigger: 'commit' }, null, 2),
+  );
 
   assert.equal(shouldRunPreCommitHook(manualDir), false);
   assert.equal(shouldRunPreCommitHook(commitDir), true);
@@ -248,7 +319,9 @@ test('manual-mode migration removes pre-commit hook when it is only ges-managed'
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-hook-only-'));
   const hookPath = path.join(dir, 'pre-commit');
 
-  fs.writeFileSync(hookPath, '#!/bin/sh\n# git-env-share pre-commit hook\n\nnpx ges precommit\n', { mode: 0o755 });
+  fs.writeFileSync(hookPath, '#!/bin/sh\n# git-env-share pre-commit hook\n\nnpx ges precommit\n', {
+    mode: 0o755,
+  });
 
   await configureManualModeHookState(dir, false);
 
@@ -265,7 +338,7 @@ test('manual-mode migration removes only ges command from shared pre-commit hook
     '# Added by git-env-share',
     'npx ges precommit',
     'echo "run tests"',
-    ''
+    '',
   ].join('\n');
 
   fs.writeFileSync(hookPath, original, { mode: 0o755 });
@@ -295,7 +368,7 @@ test('manual-mode migration keeps shared pre-commit hook unchanged when removal 
     'echo "run lint"',
     '# Added by git-env-share',
     'npx ges precommit',
-    ''
+    '',
   ].join('\n');
 
   fs.writeFileSync(hookPath, original, { mode: 0o755 });
@@ -347,7 +420,9 @@ test('upsertSecretEnvGitAttributeRule appends canonical rule once and is idempot
   assert.match(first.content, /\.secret\.env\*\s+filter=git-age/);
   assert.equal(second.changed, false);
 
-  const ruleCount = first.content.split(/\r?\n/).filter((line) => line.includes('.secret.env*') && line.includes('filter=git-age')).length;
+  const ruleCount = first.content
+    .split(/\r?\n/)
+    .filter((line) => line.includes('.secret.env*') && line.includes('filter=git-age')).length;
   assert.equal(ruleCount, 1);
 });
 
@@ -403,14 +478,12 @@ test('tryMarkTrackedPathAsConflict marks tracked file as unmerged during merge-l
     dir,
     path.join(dir, '.env'),
     Buffer.from('HELLO=local\n'),
-    Buffer.from('HELLO=remote\n')
+    Buffer.from('HELLO=remote\n'),
   );
 
   assert.equal(result, true);
 
-  const unmerged = runGit(['ls-files', '-u', '--', '.env'], dir)
-    .split(/\r?\n/)
-    .filter(Boolean);
+  const unmerged = runGit(['ls-files', '-u', '--', '.env'], dir).split(/\r?\n/).filter(Boolean);
 
   assert.equal(unmerged.length, 3);
 });
@@ -430,7 +503,7 @@ test('tryMarkTrackedPathAsConflict returns false when merge-like state is not ac
     dir,
     path.join(dir, '.env'),
     Buffer.from('HELLO=local\n'),
-    Buffer.from('HELLO=remote\n')
+    Buffer.from('HELLO=remote\n'),
   );
 
   assert.equal(result, false);
@@ -456,7 +529,7 @@ test('tryMarkTrackedPathAsConflict returns false for untracked files', () => {
     dir,
     path.join(dir, '.env'),
     Buffer.from('HELLO=local\n'),
-    Buffer.from('HELLO=remote\n')
+    Buffer.from('HELLO=remote\n'),
   );
 
   assert.equal(result, false);

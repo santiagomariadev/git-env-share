@@ -20,9 +20,13 @@ function printHelp() {
   console.log('  init                  Initialize and configure the repository');
   console.log('  reconfigure           Re-apply git filter and hook setup');
   console.log('  stage                 Encrypt and stage .secret.env* files (manual mode)');
-  console.log('  push                  Encrypt, stage, and commit .secret.env* files (manual mode)');
+  console.log(
+    '  push                  Encrypt, stage, and commit .secret.env* files (manual mode)',
+  );
   console.log('  generate-key          Generate an age keypair and print public key');
-  console.log('  add-key <key|user>    Add age key, SSH key, or GitHub username and optionally re-encrypt');
+  console.log(
+    '  add-key <key|user>    Add age key, SSH key, or GitHub username and optionally re-encrypt',
+  );
   console.log('  add-ssh-key <key>     Add a raw SSH public key recipient');
   console.log('  add-github-user <u>   Fetch and add SSH keys for a GitHub username');
   console.log('');

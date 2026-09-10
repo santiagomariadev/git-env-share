@@ -6,11 +6,11 @@ import { hasExplicitConfig, loadGitEnvShareConfig } from '../config';
 import { setup } from '../scripts/setup';
 import { askBooleanQuestion, askQuestion } from '../utils/askQuestion';
 
-export type InitOptions = {
+export interface InitOptions {
   encryptionKey: GitEnvShareConfig['encryptionKey'];
   encryptionTrigger: GitEnvShareConfig['encryptionTrigger'];
   dryRun: boolean;
-};
+}
 
 export function parseInitOptions(argv: string[] = process.argv.slice(2)): InitOptions {
   const args = new Map<string, string>();
@@ -64,13 +64,17 @@ export function parseInitOptions(argv: string[] = process.argv.slice(2)): InitOp
   const keyValue = args.get('key')?.toLowerCase();
   const triggerValue = args.get('trigger')?.toLowerCase();
 
-  const encryptionKey = keyValue === ENCRYPTION_KEYS.SSH ? ENCRYPTION_KEYS.SSH : ENCRYPTION_KEYS.AGE;
-  const encryptionTrigger = triggerValue === ENCRYPTION_TRIGGERS.MANUAL ? ENCRYPTION_TRIGGERS.MANUAL : ENCRYPTION_TRIGGERS.COMMIT;
+  const encryptionKey =
+    keyValue === ENCRYPTION_KEYS.SSH ? ENCRYPTION_KEYS.SSH : ENCRYPTION_KEYS.AGE;
+  const encryptionTrigger =
+    triggerValue === ENCRYPTION_TRIGGERS.MANUAL
+      ? ENCRYPTION_TRIGGERS.MANUAL
+      : ENCRYPTION_TRIGGERS.COMMIT;
 
   return {
     encryptionKey,
     encryptionTrigger,
-    dryRun
+    dryRun,
   };
 }
 
@@ -97,9 +101,14 @@ async function promptForConfig(argv: string[]): Promise<void> {
   }
 
   const parsedOptions = parseInitOptions(argv);
-  const hasFlagHelp = argv.includes('--help') || argv.includes('-h') || argv.some((arg) => arg.startsWith('--help='));
-  const hasKeyFlag = argv.includes('--key') || argv.includes('-k') || argv.some((arg) => arg.startsWith('--key='));
-  const hasTriggerFlag = argv.includes('--trigger') || argv.includes('-t') || argv.some((arg) => arg.startsWith('--trigger='));
+  const hasFlagHelp =
+    argv.includes('--help') || argv.includes('-h') || argv.some((arg) => arg.startsWith('--help='));
+  const hasKeyFlag =
+    argv.includes('--key') || argv.includes('-k') || argv.some((arg) => arg.startsWith('--key='));
+  const hasTriggerFlag =
+    argv.includes('--trigger') ||
+    argv.includes('-t') ||
+    argv.some((arg) => arg.startsWith('--trigger='));
   const hasDryRunFlag = parsedOptions.dryRun;
 
   if (hasFlagHelp) {
@@ -108,27 +117,37 @@ async function promptForConfig(argv: string[]): Promise<void> {
   }
 
   if (hasDryRunFlag) {
-    console.log('Preview mode: npx ges init would create the repo config and then run setup, but no repository files will be modified.');
+    console.log(
+      'Preview mode: npx ges init would create the repo config and then run setup, but no repository files will be modified.',
+    );
     return;
   }
 
-  const answer = await askBooleanQuestion('No git-env-share config was found. Would you like to create one now?');
+  const answer = await askBooleanQuestion(
+    'No git-env-share config was found. Would you like to create one now?',
+  );
   if (!answer) {
-    console.log('Skipping config creation. You can run "npx ges init" later or add the repo config manually.');
+    console.log(
+      'Skipping config creation. You can run "npx ges init" later or add the repo config manually.',
+    );
     return;
   }
 
   const encryptionKey = hasKeyFlag
     ? parsedOptions.encryptionKey
-    : (await askBooleanQuestion('Use SSH as the encryption key instead of age?')) ? ENCRYPTION_KEYS.SSH : ENCRYPTION_KEYS.AGE;
+    : (await askBooleanQuestion('Use SSH as the encryption key instead of age?'))
+      ? ENCRYPTION_KEYS.SSH
+      : ENCRYPTION_KEYS.AGE;
 
   const encryptionTrigger = hasTriggerFlag
     ? parsedOptions.encryptionTrigger
-    : (await askBooleanQuestion('Use manual encryption instead of commit-time encryption?')) ? ENCRYPTION_TRIGGERS.MANUAL : ENCRYPTION_TRIGGERS.COMMIT;
+    : (await askBooleanQuestion('Use manual encryption instead of commit-time encryption?'))
+      ? ENCRYPTION_TRIGGERS.MANUAL
+      : ENCRYPTION_TRIGGERS.COMMIT;
 
   const config: GitEnvShareConfig = {
     encryptionKey,
-    encryptionTrigger
+    encryptionTrigger,
   };
 
   console.log(`
@@ -138,7 +157,9 @@ Selected setup: ${config.encryptionKey === ENCRYPTION_KEYS.SSH ? 'SSH' : 'Age'} 
   if (encryptionKey === ENCRYPTION_KEYS.AGE) {
     const ageKeyPath = await askQuestion('ageKeyPath (default: ~/.age/key.txt):');
     config.ageKeyPath = ageKeyPath && ageKeyPath.trim() !== '' ? ageKeyPath : '~/.age/key.txt';
-    console.log('Age is selected as the encryption key. If you leave the path blank, a new keypair will be generated automatically.');
+    console.log(
+      'Age is selected as the encryption key. If you leave the path blank, a new keypair will be generated automatically.',
+    );
   } else {
     const sshKeyPath = await askQuestion('sshKeyPath (default: ~/.ssh/id_ed25519):');
     config.sshKeyPath = sshKeyPath && sshKeyPath.trim() !== '' ? sshKeyPath : '~/.ssh/id_ed25519';
@@ -164,7 +185,8 @@ Selected setup: ${config.encryptionKey === ENCRYPTION_KEYS.SSH ? 'SSH' : 'Age'} 
 
 export async function runInit(argv = process.argv.slice(2)) {
   const parsedOptions = parseInitOptions(argv);
-  const hasHelp = argv.includes('--help') || argv.includes('-h') || argv.some((arg) => arg.startsWith('--help='));
+  const hasHelp =
+    argv.includes('--help') || argv.includes('-h') || argv.some((arg) => arg.startsWith('--help='));
 
   if (hasHelp) {
     printInitHelp();
@@ -176,8 +198,13 @@ export async function runInit(argv = process.argv.slice(2)) {
   }
 
   const config = loadGitEnvShareConfig(process.cwd());
-  if (config.encryptionKey === ENCRYPTION_KEYS.SSH && (!config.githubUsernames || config.githubUsernames.length === 0)) {
-    console.log('SSH was selected as the encryption key without GitHub usernames. You can add them later to .git-env-share.config or package.json.');
+  if (
+    config.encryptionKey === ENCRYPTION_KEYS.SSH &&
+    (!config.githubUsernames || config.githubUsernames.length === 0)
+  ) {
+    console.log(
+      'SSH was selected as the encryption key without GitHub usernames. You can add them later to .git-env-share.config or package.json.',
+    );
   }
   await setup(argv);
 }
