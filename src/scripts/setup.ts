@@ -2,6 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { ENCRYPTION_KEYS, ENCRYPTION_TRIGGERS } from '../config/defaults';
 import { askBooleanQuestion } from '../utils/askQuestion';
 import { ensureSecureDirectory, ensureSecureFile } from '../utils/files';
 import { getGitHooksDir, getGitRoot } from '../utils/git';
@@ -169,13 +170,13 @@ export async function setup() {
 
     await confirmSetup();
 
-    if (config.encryptionTrigger === 'commit') {
+    if (config.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT) {
       await configureGitHooks(gitHooksDir);
     }
 
     const recipientsPath = configureGitAgeScripts(rootDir);
 
-    if (config.encryptionKey === 'ssh') {
+    if (config.encryptionKey === ENCRYPTION_KEYS.SSH) {
       console.log('✓ SSH encryption is enabled. The project will expect GitHub SSH recipients to be listed in .agerecipients.');
       const syncedKeys = await syncGitHubRecipientsFromConfig(rootDir);
       if (syncedKeys.length > 0) {
@@ -188,10 +189,19 @@ export async function setup() {
     }
 
     console.log('\n✅ git-env-share is configured.');
+    console.log(`Current setup: ${config.encryptionKey === ENCRYPTION_KEYS.SSH ? 'SSH' : 'Age'} encryption with ${config.encryptionTrigger === ENCRYPTION_TRIGGERS.MANUAL ? 'manual' : 'commit-time'} trigger.`);
     console.log('Next steps:');
-    console.log('  1. Share your public key with the repo admin.');
-    console.log(`  2. ${config.encryptionTrigger === 'commit' ? 'Commit an .env file to trigger encryption via the pre-commit hook.' : 'Run "npx git-env-share-stage-env" when you want to refresh encrypted .secret files manually.'}`);
-    console.log('  3. Keep using the repo normally; tracked files will be the encrypted .secret.* versions instead of raw .env values.');
+    if (config.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT) {
+      console.log('  1. Share your public key or GitHub username with the repo admin.');
+      console.log('  2. Edit a local .env file and commit normally; the pre-commit hook will encrypt it before the commit succeeds.');
+      console.log('  3. Continue tracking only the encrypted .secret.* files, while raw .env values remain local-only.');
+    } else {
+      console.log('  1. Share your public key or GitHub username with the repo admin.');
+      console.log('  2. Run "npx git-env-share-stage-env" when you want to encrypt and stage the current .env files.');
+      console.log('  3. Run "npx git-env-share-push-env" to encrypt, stage, and commit in one command.');
+    }
+    console.log('');
+    console.log('Migration note: switching between commit and manual triggers only changes when encryption runs; it does not change the encrypted file naming or the Git filter setup.');
   } catch {
     console.log('git-env-share: Not inside a Git repository. Skipping setup.');
   }

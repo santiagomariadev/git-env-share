@@ -1,12 +1,13 @@
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { ENCRYPTION_TRIGGERS } from '../config/defaults';
 import { loadGitEnvShareConfig } from '../config';
 import { getGitRoot, gitAdd, gitResetPaths, gitRestoreStaged } from './git';
 
 export function ensureManualMode(rootDir: string): void {
   const config = loadGitEnvShareConfig(rootDir);
-  if (config.encryptionTrigger !== 'manual') {
+  if (config.encryptionTrigger !== ENCRYPTION_TRIGGERS.MANUAL) {
     throw new Error('This command is only available when "encryptionTrigger" is set to "manual". Update your repo config and run setup again.');
   }
 }

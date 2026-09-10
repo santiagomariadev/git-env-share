@@ -1,27 +1,39 @@
+export const ENCRYPTION_KEYS = {
+  AGE: 'age',
+  SSH: 'ssh'
+} as const;
+
+export const ENCRYPTION_TRIGGERS = {
+  COMMIT: 'commit',
+  MANUAL: 'manual'
+} as const;
+
+export const VALID_ENCRYPTION_KEYS = Object.freeze(Object.values(ENCRYPTION_KEYS));
+export const VALID_ENCRYPTION_TRIGGERS = Object.freeze(Object.values(ENCRYPTION_TRIGGERS));
+export const VALID_MODES = VALID_ENCRYPTION_KEYS;
+
+export type GitEnvShareEncryptionKey = (typeof ENCRYPTION_KEYS)[keyof typeof ENCRYPTION_KEYS];
+export type GitEnvShareEncryptionTrigger = (typeof ENCRYPTION_TRIGGERS)[keyof typeof ENCRYPTION_TRIGGERS];
+
 export const DEFAULT_CONFIG: Readonly<{
-  encryptionKey: 'age';
+  encryptionKey: GitEnvShareEncryptionKey;
   ageKeyPath: string;
   sshKeyPath: string;
   githubUsernames: string[];
   recipientsFile: string;
   enabled: boolean;
   paused: boolean;
-  encryptionTrigger: 'manual' | 'commit';
+  encryptionTrigger: GitEnvShareEncryptionTrigger;
 }> = Object.freeze({
-  encryptionKey: 'age',
+  encryptionKey: ENCRYPTION_KEYS.AGE,
   ageKeyPath: '~/.age/key.txt',
   sshKeyPath: '~/.ssh/id_ed25519',
   githubUsernames: [],
   recipientsFile: '.agerecipients',
   enabled: true,
   paused: false,
-  encryptionTrigger: 'commit'
+  encryptionTrigger: ENCRYPTION_TRIGGERS.COMMIT
 });
-
-export const VALID_MODES = Object.freeze(['age', 'ssh'] as const);
-export const VALID_ENCRYPTION_KEYS = VALID_MODES;
-
-export type GitEnvShareEncryptionKey = (typeof VALID_MODES)[number];
 
 export type GitEnvShareConfig = {
   encryptionKey?: GitEnvShareEncryptionKey | string;
@@ -33,6 +45,6 @@ export type GitEnvShareConfig = {
   recipientsFile?: string;
   enabled?: boolean;
   paused?: boolean;
-  encryptionTrigger?: 'manual' | 'commit' | string;
+  encryptionTrigger?: GitEnvShareEncryptionTrigger | string;
   [key: string]: unknown;
 };

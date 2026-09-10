@@ -1,7 +1,15 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { DEFAULT_CONFIG, VALID_MODES, type GitEnvShareConfig } from './defaults';
+import {
+  DEFAULT_CONFIG,
+  ENCRYPTION_KEYS,
+  ENCRYPTION_TRIGGERS,
+  VALID_ENCRYPTION_KEYS,
+  VALID_ENCRYPTION_TRIGGERS,
+  VALID_MODES,
+  type GitEnvShareConfig
+} from './defaults';
 import { readJsonFile, resolveConfigPath } from '../utils/files';
 
 function normalizeArray(value: unknown): string[] {
@@ -13,7 +21,7 @@ function normalizeArray(value: unknown): string[] {
 function resolveEncryptionKey(rawEncryptionKey?: unknown, fallback: 'age' | 'ssh' = DEFAULT_CONFIG.encryptionKey): 'age' | 'ssh' {
   const normalizedKey = typeof rawEncryptionKey === 'string' ? rawEncryptionKey.toLowerCase() : undefined;
 
-  if (normalizedKey && VALID_MODES.includes(normalizedKey as (typeof VALID_MODES)[number])) {
+  if (normalizedKey && VALID_ENCRYPTION_KEYS.includes(normalizedKey as (typeof VALID_ENCRYPTION_KEYS)[number])) {
     return normalizedKey as 'age' | 'ssh';
   }
 
@@ -83,11 +91,23 @@ export function loadGitEnvShareConfig(projectRoot = process.cwd(), overrides: Pa
   config.enabled = config.enabled !== false;
   config.paused = Boolean(config.paused);
   const rawTrigger = String(config.encryptionTrigger || DEFAULT_CONFIG.encryptionTrigger).toLowerCase();
-  config.encryptionTrigger = rawTrigger === 'manual' || rawTrigger === 'commit'
+  config.encryptionTrigger = VALID_ENCRYPTION_TRIGGERS.includes(rawTrigger as (typeof VALID_ENCRYPTION_TRIGGERS)[number])
     ? rawTrigger
     : DEFAULT_CONFIG.encryptionTrigger;
 
   return config;
+}
+
+export function describeGitEnvShareConfig(config: Partial<GitEnvShareConfig> = {}): string {
+  const resolved = loadGitEnvShareConfig(process.cwd(), config);
+  const encryptionLabel = resolved.encryptionKey === ENCRYPTION_KEYS.SSH ? 'SSH' : 'Age';
+  const triggerLabel = resolved.encryptionTrigger === ENCRYPTION_TRIGGERS.MANUAL ? 'manual' : 'commit';
+
+  if (triggerLabel === ENCRYPTION_TRIGGERS.MANUAL) {
+    return `${encryptionLabel} encryption is configured for manual workflow. Use "npx git-env-share-stage-env" to encrypt and stage files, or "npx git-env-share-push-env" to encrypt, stage, and commit in one step.`;
+  }
+
+  return `${encryptionLabel} encryption is configured for commit-time workflow. The pre-commit hook will encrypt .env files before each commit.`;
 }
 
 export function resolvePrivateKeyPath(config: Partial<GitEnvShareConfig> = {}, projectRoot = process.cwd()): string | null {
@@ -98,7 +118,7 @@ export function resolvePrivateKeyPath(config: Partial<GitEnvShareConfig> = {}, p
     effectiveConfig.encryptionKey as 'age' | 'ssh'
   );
 
-  const candidate = encryptionKey === 'ssh'
+  const candidate = encryptionKey === ENCRYPTION_KEYS.SSH
     ? mergedConfig.sshKeyPath || DEFAULT_CONFIG.sshKeyPath
     : mergedConfig.ageKeyPath || DEFAULT_CONFIG.ageKeyPath;
 
@@ -108,7 +128,7 @@ export function resolvePrivateKeyPath(config: Partial<GitEnvShareConfig> = {}, p
   }
 
   const fallbackPaths: string[] = [];
-  if (encryptionKey === 'ssh') {
+  if (encryptionKey === ENCRYPTION_KEYS.SSH) {
     fallbackPaths.push(
       path.join(os.homedir(), '.ssh', 'id_ed25519'),
       path.join(os.homedir(), '.ssh', 'id_rsa'),
@@ -128,4 +148,11 @@ export function resolvePrivateKeyPath(config: Partial<GitEnvShareConfig> = {}, p
   return candidatePath || fallbackPaths[0] || null;
 }
 
-export { DEFAULT_CONFIG, VALID_MODES };
+export {
+  DEFAULT_CONFIG,
+  ENCRYPTION_KEYS,
+  ENCRYPTION_TRIGGERS,
+  VALID_ENCRYPTION_KEYS,
+  VALID_ENCRYPTION_TRIGGERS,
+  VALID_MODES
+};

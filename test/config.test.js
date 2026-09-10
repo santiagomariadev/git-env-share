@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const { loadGitEnvShareConfig, resolvePrivateKeyPath, hasExplicitConfig } = require('../dist/config');
+const { loadGitEnvShareConfig, resolvePrivateKeyPath, hasExplicitConfig, describeGitEnvShareConfig } = require('../dist/config');
 const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncryption');
 const { shouldSkipRemoteValidation } = require('../dist/utils/git');
 const { shouldRunPreCommitHook } = require('../dist/bin/pre-commit');
@@ -115,6 +115,19 @@ test('detects explicit repo configuration before prompting for init', () => {
   fs.writeFileSync(path.join(secondDir, '.git-env-share.config'), JSON.stringify({ encryptionKey: 'ssh' }, null, 2));
 
   assert.equal(hasExplicitConfig(secondDir), true);
+});
+
+test('describes the current configuration in plain-language setup guidance', () => {
+  const config = loadGitEnvShareConfig(process.cwd(), {
+    encryptionKey: 'ssh',
+    encryptionTrigger: 'manual'
+  });
+
+  const summary = describeGitEnvShareConfig(config);
+
+  assert.match(summary, /SSH/i);
+  assert.match(summary, /manual/i);
+  assert.match(summary, /stage-env|push-env/i);
 });
 
 test('rebuilds .agerecipients from githubUsernames when SSH mode is configured', async () => {

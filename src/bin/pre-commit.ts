@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
+import { ENCRYPTION_TRIGGERS } from '../config/defaults';
 import { loadGitEnvShareConfig } from '../config';
 import { getRemoteGitUrl } from '../utils/git';
 import { getEnvFilesAndUpdateGitIgnore, stageEnvSecrets } from '../utils/envWorkflow';
 
 export function shouldRunPreCommitHook(projectRoot = process.cwd()): boolean {
   const config = loadGitEnvShareConfig(projectRoot);
-  return config.enabled !== false && !config.paused && config.encryptionTrigger === 'commit';
+  return config.enabled !== false && !config.paused && config.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT;
 }
 
 function verifyGitAccess() {
