@@ -6,6 +6,8 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const { loadGitEnvShareConfig, resolvePrivateKeyPath, hasExplicitConfig, describeGitEnvShareConfig } = require('../dist/config');
+const { parseInitOptions } = require('../dist/bin/init');
+const { parseSetupOptions } = require('../dist/scripts/setup');
 const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncryption');
 const { shouldSkipRemoteValidation } = require('../dist/utils/git');
 const { shouldRunPreCommitHook } = require('../dist/bin/pre-commit');
@@ -128,6 +130,43 @@ test('describes the current configuration in plain-language setup guidance', () 
   assert.match(summary, /SSH/i);
   assert.match(summary, /manual/i);
   assert.match(summary, /stage-env|push-env/i);
+});
+
+test('parses explicit init flags for auth and trigger choices', () => {
+  const parsed = parseInitOptions(['--key', 'ssh', '--trigger', 'manual']);
+
+  assert.equal(parsed.encryptionKey, 'ssh');
+  assert.equal(parsed.encryptionTrigger, 'manual');
+  assert.equal(parsed.dryRun, false);
+
+  const defaults = parseInitOptions([]);
+  assert.equal(defaults.encryptionKey, 'age');
+  assert.equal(defaults.encryptionTrigger, 'commit');
+  assert.equal(defaults.dryRun, false);
+});
+
+test('parses dry-run preview flags for init and setup', () => {
+  const parsedInit = parseInitOptions(['--dry-run', '--trigger', 'manual']);
+  assert.equal(parsedInit.dryRun, true);
+  assert.equal(parsedInit.encryptionTrigger, 'manual');
+
+  const parsedSetup = parseSetupOptions(['--dry-run', '--trigger', 'manual']);
+  assert.equal(parsedSetup.dryRun, true);
+  assert.equal(parsedSetup.encryptionTrigger, 'manual');
+
+  const defaults = parseInitOptions([]);
+  assert.equal(defaults.dryRun, false);
+});
+
+test('parses dry-run preview flags for setup', () => {
+  const parsed = parseSetupOptions(['--dry-run', '--trigger', 'manual']);
+
+  assert.equal(parsed.dryRun, true);
+  assert.equal(parsed.encryptionTrigger, 'manual');
+
+  const defaults = parseSetupOptions([]);
+  assert.equal(defaults.dryRun, false);
+  assert.equal(defaults.encryptionTrigger, 'commit');
 });
 
 test('rebuilds .agerecipients from githubUsernames when SSH mode is configured', async () => {

@@ -70,6 +70,19 @@ Every team member should have the `age` CLI installed locally:
    npx git-env-share-init
    ```
 
+   You can also pass the repo choices directly when you want to skip the interactive prompts:
+
+   ```bash
+   npx git-env-share-init --key age --trigger commit
+   npx git-env-share-init --key ssh --trigger manual
+   ```
+
+   Use `--dry-run` to preview the repo changes without modifying hooks or Git settings:
+
+   ```bash
+   npx git-env-share-init --dry-run
+   ```
+
    This configures the repository for you by:
 
    - updating the local Git filter settings
@@ -92,7 +105,10 @@ These are the main commands users will run:
 
 ```bash
 npx git-env-share-init
+npx git-env-share-init --key ssh --trigger manual
+npx git-env-share-init --dry-run
 npx git-env-share-reconfigure
+npx git-env-share-reconfigure --dry-run
 npx git-env-share-stage-env
 npx git-env-share-push-env
 npx git-env-share-generate-key
@@ -103,11 +119,31 @@ npx git-env-share-add-github-user octocat
 
 Notes:
 
-- `git-env-share-init` creates a repo config when missing.
+- `git-env-share-init` creates a repo config when missing and accepts `--key` and `--trigger` arguments.
+- `--key` accepts `age` or `ssh` and chooses the encryption identity model.
+- `--trigger` accepts `commit` or `manual` and chooses when encryption runs.
+- `--dry-run` previews the repository changes before writing to `.gitattributes`, `.agerecipients`, Git config, or hooks.
 - `git-env-share-reconfigure` reapplies the Git filter and hook setup using the current config.
 - `git-env-share-add-key` is for adding an Age public key.
 - `git-env-share-add-github-user` is for SSH mode recipients.
 - `git-env-share-add-ssh-key` adds a raw SSH public key directly.
+
+## Init arguments
+
+`git-env-share-init` supports explicit repo setup choices without going through the interactive prompt flow:
+
+```bash
+npx git-env-share-init --key age --trigger commit
+npx git-env-share-init --key ssh --trigger manual
+npx git-env-share-init --help
+```
+
+- `--key` selects the encryption backend: `age` or `ssh`
+- `--trigger` selects when encryption runs: `commit` or `manual`
+- `--dry-run` shows the planned repository changes without writing them
+- `--help` prints the available options and examples
+
+This keeps the mental model simple: choose how you authenticate (`age` vs `ssh`), then choose when the repo encrypts files (`commit` vs `manual`).
 
 ## Team onboarding workflow
 

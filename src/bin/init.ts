@@ -6,11 +6,109 @@ import { hasExplicitConfig, loadGitEnvShareConfig } from '../config';
 import { setup } from '../scripts/setup';
 import { askBooleanQuestion, askQuestion } from '../utils/askQuestion';
 
+export type InitOptions = {
+  encryptionKey: GitEnvShareConfig['encryptionKey'];
+  encryptionTrigger: GitEnvShareConfig['encryptionTrigger'];
+  dryRun: boolean;
+};
+
+export function parseInitOptions(argv: string[] = process.argv.slice(2)): InitOptions {
+  const args = new Map<string, string>();
+  let dryRun = false;
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    const nextValue = argv[index + 1];
+
+    if (value === '--key' || value === '-k') {
+      if (nextValue && !nextValue.startsWith('-')) {
+        args.set('key', nextValue);
+        index += 1;
+      }
+      continue;
+    }
+
+    if (value === '--trigger' || value === '-t') {
+      if (nextValue && !nextValue.startsWith('-')) {
+        args.set('trigger', nextValue);
+        index += 1;
+      }
+      continue;
+    }
+
+    if (value === '--dry-run' || value === '-n') {
+      dryRun = true;
+      continue;
+    }
+
+    if (value.startsWith('--key=')) {
+      args.set('key', value.slice('--key='.length));
+      continue;
+    }
+
+    if (value.startsWith('--trigger=')) {
+      args.set('trigger', value.slice('--trigger='.length));
+      continue;
+    }
+
+    if (value.startsWith('--dry-run=')) {
+      dryRun = value.slice('--dry-run='.length).toLowerCase() !== 'false';
+      continue;
+    }
+
+    if (value === '--help' || value === '-h') {
+      args.set('help', '1');
+    }
+  }
+
+  const keyValue = args.get('key')?.toLowerCase();
+  const triggerValue = args.get('trigger')?.toLowerCase();
+
+  const encryptionKey = keyValue === ENCRYPTION_KEYS.SSH ? ENCRYPTION_KEYS.SSH : ENCRYPTION_KEYS.AGE;
+  const encryptionTrigger = triggerValue === ENCRYPTION_TRIGGERS.MANUAL ? ENCRYPTION_TRIGGERS.MANUAL : ENCRYPTION_TRIGGERS.COMMIT;
+
+  return {
+    encryptionKey,
+    encryptionTrigger,
+    dryRun
+  };
+}
+
+function printInitHelp(): void {
+  console.log('git-env-share init');
+  console.log('');
+  console.log('Options:');
+  console.log('  --key, -k     Authentication method: age or ssh (default: age)');
+  console.log('  --trigger, -t Encryption trigger: commit or manual (default: commit)');
+  console.log('  --help, -h    Show this help message');
+  console.log('');
+  console.log('Examples:');
+  console.log('  git-env-share-init --key ssh --trigger manual');
+  console.log('  git-env-share-init --trigger commit');
+}
+
 async function promptForConfig(): Promise<void> {
   const repoRoot = process.cwd();
   const configPath = path.join(repoRoot, '.git-env-share.config');
 
   if (hasExplicitConfig(repoRoot)) {
+    return;
+  }
+
+  const rawArgs = process.argv.slice(2);
+  const parsedOptions = parseInitOptions(rawArgs);
+  const hasFlagHelp = rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.some((arg) => arg.startsWith('--help='));
+  const hasKeyFlag = rawArgs.includes('--key') || rawArgs.includes('-k') || rawArgs.some((arg) => arg.startsWith('--key='));
+  const hasTriggerFlag = rawArgs.includes('--trigger') || rawArgs.includes('-t') || rawArgs.some((arg) => arg.startsWith('--trigger='));
+  const hasDryRunFlag = parsedOptions.dryRun;
+
+  if (hasFlagHelp) {
+    printInitHelp();
+    return;
+  }
+
+  if (hasDryRunFlag) {
+    console.log('Preview mode: git-env-share-init would create the repo config and then run setup, but no repository files will be modified.');
     return;
   }
 
@@ -20,13 +118,22 @@ async function promptForConfig(): Promise<void> {
     return;
   }
 
-  const sshKeyAnswer = await askBooleanQuestion('Use SSH as the encryption key instead of age?');
-  const encryptionKey = sshKeyAnswer ? ENCRYPTION_KEYS.SSH : ENCRYPTION_KEYS.AGE;
-  const encryptionTriggerAnswer = await askBooleanQuestion('Use manual encryption instead of commit-time encryption?');
+  const encryptionKey = hasKeyFlag
+    ? parsedOptions.encryptionKey
+    : (await askBooleanQuestion('Use SSH as the encryption key instead of age?')) ? ENCRYPTION_KEYS.SSH : ENCRYPTION_KEYS.AGE;
+
+  const encryptionTrigger = hasTriggerFlag
+    ? parsedOptions.encryptionTrigger
+    : (await askBooleanQuestion('Use manual encryption instead of commit-time encryption?')) ? ENCRYPTION_TRIGGERS.MANUAL : ENCRYPTION_TRIGGERS.COMMIT;
+
   const config: GitEnvShareConfig = {
     encryptionKey,
-    encryptionTrigger: encryptionTriggerAnswer ? ENCRYPTION_TRIGGERS.MANUAL : ENCRYPTION_TRIGGERS.COMMIT
+    encryptionTrigger
   };
+
+  console.log(`
+Selected setup: ${config.encryptionKey === ENCRYPTION_KEYS.SSH ? 'SSH' : 'Age'} key + ${config.encryptionTrigger === ENCRYPTION_TRIGGERS.MANUAL ? 'manual' : 'commit-time'} trigger.
+`);
 
   if (encryptionKey === ENCRYPTION_KEYS.AGE) {
     const ageKeyPath = await askQuestion('ageKeyPath (default: ~/.age/key.txt):');
@@ -56,6 +163,14 @@ async function promptForConfig(): Promise<void> {
 }
 
 async function main() {
+  const rawArgs = process.argv.slice(2);
+  const parsedOptions = parseInitOptions(rawArgs);
+
+  if (parsedOptions.dryRun) {
+    await setup(rawArgs);
+    return;
+  }
+
   await promptForConfig();
   const config = loadGitEnvShareConfig(process.cwd());
   if (config.encryptionKey === ENCRYPTION_KEYS.SSH && (!config.githubUsernames || config.githubUsernames.length === 0)) {
@@ -64,4 +179,6 @@ async function main() {
   await setup();
 }
 
-void main();
+if (require.main === module) {
+  void main();
+}

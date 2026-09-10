@@ -9,6 +9,44 @@ import { getGitHooksDir, getGitRoot } from '../utils/git';
 import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
 import { syncGitHubRecipientsFromConfig } from '../utils/sshEnvEncryption';
 
+export type SetupOptions = {
+  dryRun: boolean;
+  encryptionTrigger?: 'manual' | 'commit' | string;
+};
+
+export function parseSetupOptions(argv: string[] = process.argv.slice(2)): SetupOptions {
+  const result: SetupOptions = { dryRun: false, encryptionTrigger: ENCRYPTION_TRIGGERS.COMMIT };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const value = argv[index];
+    const nextValue = argv[index + 1];
+
+    if (value === '--dry-run' || value === '-n') {
+      result.dryRun = true;
+      continue;
+    }
+
+    if (value === '--trigger' || value === '-t') {
+      if (nextValue && !nextValue.startsWith('-')) {
+        result.encryptionTrigger = nextValue.toLowerCase();
+        index += 1;
+      }
+      continue;
+    }
+
+    if (value.startsWith('--trigger=')) {
+      result.encryptionTrigger = value.slice('--trigger='.length).toLowerCase();
+      continue;
+    }
+  }
+
+  if (result.encryptionTrigger !== ENCRYPTION_TRIGGERS.MANUAL && result.encryptionTrigger !== ENCRYPTION_TRIGGERS.COMMIT) {
+    result.encryptionTrigger = ENCRYPTION_TRIGGERS.COMMIT;
+  }
+
+  return result;
+}
+
 function getDirectories() {
   const gitHooksDir = getGitHooksDir();
   const rootDir = getGitRoot();
@@ -23,8 +61,13 @@ function getDirectories() {
   return { gitHooksDir: targetHook, rootDir };
 }
 
-async function confirmSetup() {
+async function confirmSetup(dryRun = false) {
   console.log('\n🔐 git-env-share setup');
+  if (dryRun) {
+    console.log('Preview mode: showing the repository changes that would be made without writing files.');
+    return;
+  }
+
   console.log('This will configure the Git filter, update .agerecipients and .gitattributes, and optionally install a pre-commit hook.');
 
   const answer = await askBooleanQuestion('Do you want to continue with the setup?');
@@ -34,10 +77,26 @@ async function confirmSetup() {
   }
 }
 
-async function configureGitHooks(gitHooksDir: string) {
+async function configureGitHooks(gitHooksDir: string, dryRun = false) {
   const precommitHookPath = path.join(gitHooksDir, 'pre-commit');
   const hookCommand = 'npx git-env-share-precommit';
   const hookScriptHeader = '#!/bin/sh\n# git-env-share pre-commit hook\n';
+
+  if (dryRun) {
+    if (!fs.existsSync(precommitHookPath)) {
+      console.log(`Preview: would create pre-commit hook at ${precommitHookPath} with:\n${hookScriptHeader}${hookCommand}\n`);
+      return;
+    }
+
+    const existingContent = fs.readFileSync(precommitHookPath, 'utf-8');
+    if (existingContent.includes(hookCommand)) {
+      console.log(`Preview: git-env-share hook already present in ${precommitHookPath}; no change required.`);
+      return;
+    }
+
+    console.log(`Preview: would append git-env-share to ${precommitHookPath}:\n${hookCommand}\n`);
+    return;
+  }
 
   if (!fs.existsSync(precommitHookPath)) {
     fs.writeFileSync(precommitHookPath, `${hookScriptHeader}\n${hookCommand}\n`, { mode: 0o755 });
@@ -64,9 +123,19 @@ async function configureGitHooks(gitHooksDir: string) {
   console.log('✓ Appended git-env-share pre-commit hook');
 }
 
-function configureGitAgeScripts(rootDir: string) {
+function configureGitAgeScripts(rootDir: string, dryRun = false) {
   const recipientsPath = path.join(rootDir, '.agerecipients');
   const attributesPath = path.join(rootDir, '.gitattributes');
+
+  if (dryRun) {
+    console.log('Preview: would configure local Git filters:');
+    console.log('  - filter.git-age.clean = cat');
+    console.log('  - filter.git-age.smudge = npx git-env-share-smudge %f');
+    console.log('  - filter.git-age.required = true');
+    console.log(`Preview: would ensure ${recipientsPath} exists and contains age public keys.`);
+    console.log(`Preview: would add ".secret.env* filter=git-age" to ${attributesPath} if it is not already present.`);
+    return recipientsPath;
+  }
 
   spawnSync('git', ['config', '--local', 'filter.git-age.clean', 'cat'], { stdio: 'inherit' });
   spawnSync('git', ['config', '--local', 'filter.git-age.smudge', 'npx git-env-share-smudge %f'], { stdio: 'inherit' });
@@ -99,10 +168,21 @@ function configureGitAgeScripts(rootDir: string) {
   return recipientsPath;
 }
 
-async function generateAgeKeyPair(recipientsPath: string) {
+async function generateAgeKeyPair(recipientsPath: string, dryRun = false) {
   const rootDir = process.cwd();
   const config = loadGitEnvShareConfig(rootDir);
   const keyPath = resolvePrivateKeyPath(config, rootDir);
+
+  if (dryRun) {
+    if (config.encryptionKey === ENCRYPTION_KEYS.SSH) {
+      console.log(`Preview: would ensure the SSH private key exists at ${keyPath} and that GitHub public keys are synced into ${recipientsPath}.`);
+      return;
+    }
+
+    console.log(`Preview: would generate an Age keypair at ${keyPath} if one is not already present.`);
+    console.log(`Preview: would add the matching public key to ${recipientsPath} if it is not already present.`);
+    return;
+  }
 
   if (config.encryptionKey === 'ssh') {
     if (fs.existsSync(keyPath || '')) {
@@ -163,35 +243,46 @@ async function generateAgeKeyPair(recipientsPath: string) {
   }
 }
 
-export async function setup() {
+export async function setup(argv: string[] = process.argv.slice(2)) {
   try {
     const { gitHooksDir, rootDir } = getDirectories();
+    const options = parseSetupOptions(argv);
     const config = loadGitEnvShareConfig(rootDir);
+    const effectiveConfig = options.encryptionTrigger ? { ...config, encryptionTrigger: options.encryptionTrigger } : config;
 
-    await confirmSetup();
+    await confirmSetup(options.dryRun);
 
-    if (config.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT) {
-      await configureGitHooks(gitHooksDir);
+    if (effectiveConfig.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT) {
+      await configureGitHooks(gitHooksDir, options.dryRun);
     }
 
-    const recipientsPath = configureGitAgeScripts(rootDir);
+    const recipientsPath = configureGitAgeScripts(rootDir, options.dryRun);
 
-    if (config.encryptionKey === ENCRYPTION_KEYS.SSH) {
+    if (effectiveConfig.encryptionKey === ENCRYPTION_KEYS.SSH) {
       console.log('✓ SSH encryption is enabled. The project will expect GitHub SSH recipients to be listed in .agerecipients.');
-      const syncedKeys = await syncGitHubRecipientsFromConfig(rootDir);
-      if (syncedKeys.length > 0) {
-        console.log(`✓ Synced ${syncedKeys.length} GitHub SSH key(s) into ${recipientsPath}.`);
+      if (options.dryRun) {
+        console.log(`Preview: would sync GitHub SSH recipients into ${recipientsPath}.`);
       } else {
-        console.log(`✓ Rebuilt ${recipientsPath} for SSH encryption. No GitHub usernames were configured.`);
+        const syncedKeys = await syncGitHubRecipientsFromConfig(rootDir);
+        if (syncedKeys.length > 0) {
+          console.log(`✓ Synced ${syncedKeys.length} GitHub SSH key(s) into ${recipientsPath}.`);
+        } else {
+          console.log(`✓ Rebuilt ${recipientsPath} for SSH encryption. No GitHub usernames were configured.`);
+        }
       }
     } else {
-      await generateAgeKeyPair(recipientsPath);
+      await generateAgeKeyPair(recipientsPath, options.dryRun);
+    }
+
+    if (options.dryRun) {
+      console.log('\nPreview complete. No files were modified. Run the same command without --dry-run to apply these changes.');
+      return;
     }
 
     console.log('\n✅ git-env-share is configured.');
-    console.log(`Current setup: ${config.encryptionKey === ENCRYPTION_KEYS.SSH ? 'SSH' : 'Age'} encryption with ${config.encryptionTrigger === ENCRYPTION_TRIGGERS.MANUAL ? 'manual' : 'commit-time'} trigger.`);
+    console.log(`Current setup: ${effectiveConfig.encryptionKey === ENCRYPTION_KEYS.SSH ? 'SSH' : 'Age'} encryption with ${effectiveConfig.encryptionTrigger === ENCRYPTION_TRIGGERS.MANUAL ? 'manual' : 'commit-time'} trigger.`);
     console.log('Next steps:');
-    if (config.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT) {
+    if (effectiveConfig.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT) {
       console.log('  1. Share your public key or GitHub username with the repo admin.');
       console.log('  2. Edit a local .env file and commit normally; the pre-commit hook will encrypt it before the commit succeeds.');
       console.log('  3. Continue tracking only the encrypted .secret.* files, while raw .env values remain local-only.');
