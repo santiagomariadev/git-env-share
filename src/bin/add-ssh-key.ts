@@ -1,18 +1,17 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { loadGitEnvShareConfig } from '../config';
 import { addSshRecipient } from '../utils/sshEnvEncryption';
 
-async function main() {
+export async function runAddSshKey(argv = process.argv.slice(2)) {
   const rootDir = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).stdout.trim();
   const config = loadGitEnvShareConfig(rootDir);
   const recipientsPath = path.join(rootDir, config.recipientsFile || '.agerecipients');
-  const rawKey = process.argv[2];
+  const rawKey = argv[0];
 
   if (!rawKey) {
-    console.error('Usage: git-env-share-add-ssh-key "ssh-ed25519 AAAA..."');
+    console.error('Usage: npx ges add-ssh-key "ssh-ed25519 AAAA..."');
     process.exit(1);
   }
 
@@ -30,4 +29,6 @@ async function main() {
   }
 }
 
-void main();
+if (require.main === module) {
+  void runAddSshKey();
+}

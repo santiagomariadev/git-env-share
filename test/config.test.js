@@ -129,7 +129,7 @@ test('describes the current configuration in plain-language setup guidance', () 
 
   assert.match(summary, /SSH/i);
   assert.match(summary, /manual/i);
-  assert.match(summary, /stage-env|push-env/i);
+  assert.match(summary, /ges stage|ges push/i);
 });
 
 test('parses explicit init flags for auth and trigger choices', () => {

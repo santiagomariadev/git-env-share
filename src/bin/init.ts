@@ -80,14 +80,15 @@ function printInitHelp(): void {
   console.log('Options:');
   console.log('  --key, -k     Authentication method: age or ssh (default: age)');
   console.log('  --trigger, -t Encryption trigger: commit or manual (default: commit)');
+  console.log('  --dry-run, -n Preview repository changes without writing files');
   console.log('  --help, -h    Show this help message');
   console.log('');
   console.log('Examples:');
-  console.log('  git-env-share-init --key ssh --trigger manual');
-  console.log('  git-env-share-init --trigger commit');
+  console.log('  npx ges init --key ssh --trigger manual');
+  console.log('  npx ges init --trigger commit');
 }
 
-async function promptForConfig(): Promise<void> {
+async function promptForConfig(argv: string[]): Promise<void> {
   const repoRoot = process.cwd();
   const configPath = path.join(repoRoot, '.git-env-share.config');
 
@@ -95,11 +96,10 @@ async function promptForConfig(): Promise<void> {
     return;
   }
 
-  const rawArgs = process.argv.slice(2);
-  const parsedOptions = parseInitOptions(rawArgs);
-  const hasFlagHelp = rawArgs.includes('--help') || rawArgs.includes('-h') || rawArgs.some((arg) => arg.startsWith('--help='));
-  const hasKeyFlag = rawArgs.includes('--key') || rawArgs.includes('-k') || rawArgs.some((arg) => arg.startsWith('--key='));
-  const hasTriggerFlag = rawArgs.includes('--trigger') || rawArgs.includes('-t') || rawArgs.some((arg) => arg.startsWith('--trigger='));
+  const parsedOptions = parseInitOptions(argv);
+  const hasFlagHelp = argv.includes('--help') || argv.includes('-h') || argv.some((arg) => arg.startsWith('--help='));
+  const hasKeyFlag = argv.includes('--key') || argv.includes('-k') || argv.some((arg) => arg.startsWith('--key='));
+  const hasTriggerFlag = argv.includes('--trigger') || argv.includes('-t') || argv.some((arg) => arg.startsWith('--trigger='));
   const hasDryRunFlag = parsedOptions.dryRun;
 
   if (hasFlagHelp) {
@@ -108,13 +108,13 @@ async function promptForConfig(): Promise<void> {
   }
 
   if (hasDryRunFlag) {
-    console.log('Preview mode: git-env-share-init would create the repo config and then run setup, but no repository files will be modified.');
+    console.log('Preview mode: npx ges init would create the repo config and then run setup, but no repository files will be modified.');
     return;
   }
 
   const answer = await askBooleanQuestion('No git-env-share config was found. Would you like to create one now?');
   if (!answer) {
-    console.log('Skipping config creation. You can run git-env-share-init later or add the repo config manually.');
+    console.log('Skipping config creation. You can run "npx ges init" later or add the repo config manually.');
     return;
   }
 
@@ -162,23 +162,26 @@ Selected setup: ${config.encryptionKey === ENCRYPTION_KEYS.SSH ? 'SSH' : 'Age'} 
   console.log(`✓ Wrote repo config to ${configPath}`);
 }
 
-async function main() {
-  const rawArgs = process.argv.slice(2);
-  const parsedOptions = parseInitOptions(rawArgs);
+export async function runInit(argv = process.argv.slice(2)) {
+  const parsedOptions = parseInitOptions(argv);
+  const hasHelp = argv.includes('--help') || argv.includes('-h') || argv.some((arg) => arg.startsWith('--help='));
 
-  if (parsedOptions.dryRun) {
-    await setup(rawArgs);
+  if (hasHelp) {
+    printInitHelp();
     return;
   }
 
-  await promptForConfig();
+  if (!parsedOptions.dryRun) {
+    await promptForConfig(argv);
+  }
+
   const config = loadGitEnvShareConfig(process.cwd());
   if (config.encryptionKey === ENCRYPTION_KEYS.SSH && (!config.githubUsernames || config.githubUsernames.length === 0)) {
     console.log('SSH was selected as the encryption key without GitHub usernames. You can add them later to .git-env-share.config or package.json.');
   }
-  await setup();
+  await setup(argv);
 }
 
 if (require.main === module) {
-  void main();
+  void runInit();
 }

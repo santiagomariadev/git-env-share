@@ -79,7 +79,7 @@ async function confirmSetup(dryRun = false) {
 
 async function configureGitHooks(gitHooksDir: string, dryRun = false) {
   const precommitHookPath = path.join(gitHooksDir, 'pre-commit');
-  const hookCommand = 'npx git-env-share-precommit';
+  const hookCommand = 'npx ges precommit';
   const hookScriptHeader = '#!/bin/sh\n# git-env-share pre-commit hook\n';
 
   if (dryRun) {
@@ -130,7 +130,7 @@ function configureGitAgeScripts(rootDir: string, dryRun = false) {
   if (dryRun) {
     console.log('Preview: would configure local Git filters:');
     console.log('  - filter.git-age.clean = cat');
-    console.log('  - filter.git-age.smudge = npx git-env-share-smudge %f');
+    console.log('  - filter.git-age.smudge = npx ges smudge %f');
     console.log('  - filter.git-age.required = true');
     console.log(`Preview: would ensure ${recipientsPath} exists and contains age public keys.`);
     console.log(`Preview: would add ".secret.env* filter=git-age" to ${attributesPath} if it is not already present.`);
@@ -138,7 +138,7 @@ function configureGitAgeScripts(rootDir: string, dryRun = false) {
   }
 
   spawnSync('git', ['config', '--local', 'filter.git-age.clean', 'cat'], { stdio: 'inherit' });
-  spawnSync('git', ['config', '--local', 'filter.git-age.smudge', 'npx git-env-share-smudge %f'], { stdio: 'inherit' });
+  spawnSync('git', ['config', '--local', 'filter.git-age.smudge', 'npx ges smudge %f'], { stdio: 'inherit' });
   spawnSync('git', ['config', '--local', 'filter.git-age.required', 'true'], { stdio: 'inherit' });
 
   if (!fs.existsSync(recipientsPath)) {
@@ -288,8 +288,8 @@ export async function setup(argv: string[] = process.argv.slice(2)) {
       console.log('  3. Continue tracking only the encrypted .secret.* files, while raw .env values remain local-only.');
     } else {
       console.log('  1. Share your public key or GitHub username with the repo admin.');
-      console.log('  2. Run "npx git-env-share-stage-env" when you want to encrypt and stage the current .env files.');
-      console.log('  3. Run "npx git-env-share-push-env" to encrypt, stage, and commit in one command.');
+      console.log('  2. Run "npx ges stage" when you want to encrypt and stage the current .env files.');
+      console.log('  3. Run "npx ges push" to encrypt, stage, and commit in one command.');
     }
     console.log('');
     console.log('Migration note: switching between commit and manual triggers only changes when encryption runs; it does not change the encrypted file naming or the Git filter setup.');

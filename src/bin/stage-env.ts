@@ -2,7 +2,7 @@
 import { getGitRoot } from '../utils/git';
 import { ensureManualMode, stageEnvSecrets } from '../utils/envWorkflow';
 
-function runStageEnv() {
+export function runStageEnv() {
   try {
     const rootDir = getGitRoot();
     ensureManualMode(rootDir);
@@ -15,9 +15,11 @@ function runStageEnv() {
 
     console.log(`✓ Prepared ${encryptedCount} encrypted .secret file(s) for commit.`);
   } catch (error: any) {
-    console.error('✕ stage-env command failed:', error.message);
+    console.error('✕ stage command failed:', error.message);
     process.exit(1);
   }
 }
 
-runStageEnv();
+if (require.main === module) {
+  runStageEnv();
+}

@@ -38,7 +38,7 @@ function verifyGitAccess() {
   }
 }
 
-function runPreCommit() {
+export function runPreCommit() {
   try {
     const rootDir = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).stdout.trim();
 

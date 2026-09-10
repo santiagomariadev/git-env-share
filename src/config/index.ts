@@ -104,7 +104,7 @@ export function describeGitEnvShareConfig(config: Partial<GitEnvShareConfig> = {
   const triggerLabel = resolved.encryptionTrigger === ENCRYPTION_TRIGGERS.MANUAL ? 'manual' : 'commit';
 
   if (triggerLabel === ENCRYPTION_TRIGGERS.MANUAL) {
-    return `${encryptionLabel} encryption is configured for manual workflow. Use "npx git-env-share-stage-env" to encrypt and stage files, or "npx git-env-share-push-env" to encrypt, stage, and commit in one step.`;
+    return `${encryptionLabel} encryption is configured for manual workflow. Use "npx ges stage" to encrypt and stage files, or "npx ges push" to encrypt, stage, and commit in one step.`;
   }
 
   return `${encryptionLabel} encryption is configured for commit-time workflow. The pre-commit hook will encrypt .env files before each commit.`;
