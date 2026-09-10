@@ -5,6 +5,111 @@ import * as path from 'node:path';
 import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
 import { writeFileAtomic } from '../utils/files';
 
+function getGitRootOrNull(projectRoot: string): string | null {
+  const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
+    cwd: projectRoot,
+    encoding: 'utf-8'
+  });
+
+  if (result.status !== 0) {
+    return null;
+  }
+
+  const root = (result.stdout || '').trim();
+  return root || null;
+}
+
+function isMergeLikeOperationInProgress(projectRoot: string): boolean {
+  const gitDirResult = spawnSync('git', ['rev-parse', '--git-dir'], {
+    cwd: projectRoot,
+    encoding: 'utf-8'
+  });
+
+  if (gitDirResult.status !== 0) {
+    return false;
+  }
+
+  const gitDir = (gitDirResult.stdout || '').trim();
+  if (!gitDir) {
+    return false;
+  }
+
+  const resolvedGitDir = path.isAbsolute(gitDir) ? gitDir : path.join(projectRoot, gitDir);
+
+  return fs.existsSync(path.join(resolvedGitDir, 'MERGE_HEAD'))
+    || fs.existsSync(path.join(resolvedGitDir, 'REBASE_HEAD'))
+    || fs.existsSync(path.join(resolvedGitDir, 'CHERRY_PICK_HEAD'));
+}
+
+function toGitRelativePath(projectRoot: string, filePath: string): string {
+  return path.relative(projectRoot, path.resolve(filePath)).split(path.sep).join('/');
+}
+
+function isPathTracked(projectRoot: string, relativePath: string): boolean {
+  const tracked = spawnSync('git', ['ls-files', '--error-unmatch', '--', relativePath], {
+    cwd: projectRoot,
+    encoding: 'utf-8'
+  });
+
+  return tracked.status === 0;
+}
+
+function writeBlob(projectRoot: string, content: Buffer): string | null {
+  const result = spawnSync('git', ['hash-object', '-w', '--stdin'], {
+    cwd: projectRoot,
+    input: content,
+    encoding: 'utf-8'
+  });
+
+  if (result.status !== 0) {
+    return null;
+  }
+
+  const sha = (result.stdout || '').trim();
+  return sha || null;
+}
+
+export function tryMarkTrackedPathAsConflict(
+  projectRoot: string,
+  filePath: string,
+  localContent: Buffer,
+  remoteContent: Buffer
+): boolean {
+  const gitRoot = getGitRootOrNull(projectRoot);
+  if (!gitRoot || !isMergeLikeOperationInProgress(gitRoot)) {
+    return false;
+  }
+
+  const candidatePath = path.isAbsolute(filePath) ? filePath : path.join(gitRoot, filePath);
+  const relativePath = toGitRelativePath(gitRoot, candidatePath);
+  if (!isPathTracked(gitRoot, relativePath)) {
+    return false;
+  }
+
+  const baseSha = writeBlob(gitRoot, localContent);
+  const localSha = writeBlob(gitRoot, localContent);
+  const remoteSha = writeBlob(gitRoot, remoteContent);
+
+  if (!baseSha || !localSha || !remoteSha) {
+    return false;
+  }
+
+  const indexInfo = [
+    `100644 ${baseSha} 1\t${relativePath}`,
+    `100644 ${localSha} 2\t${relativePath}`,
+    `100644 ${remoteSha} 3\t${relativePath}`,
+    ''
+  ].join('\n');
+
+  const update = spawnSync('git', ['update-index', '--index-info'], {
+    cwd: gitRoot,
+    input: indexInfo,
+    encoding: 'utf-8'
+  });
+
+  return update.status === 0;
+}
+
 export function runSmudge(argv = process.argv.slice(2)) {
   const secretFilePath = argv[0];
   const projectRoot = process.cwd();
@@ -31,7 +136,8 @@ export function runSmudge(argv = process.argv.slice(2)) {
     process.exit(1);
   }
 
-  const decryptedContent = ageProcess.stdout;
+  const decryptedContent = ageProcess.stdout as Buffer;
+  let outputContent: Buffer = decryptedContent;
 
   if (secretFilePath && secretFilePath.startsWith('.secret')) {
     const dir = path.dirname(secretFilePath);
@@ -60,6 +166,13 @@ export function runSmudge(argv = process.argv.slice(2)) {
             Buffer.from('>>>>>>> REMOTE VERSION\n')
           ]);
           writeFileAtomic(envFilePath, conflictContent);
+          outputContent = conflictContent;
+
+          const markedAsConflict = tryMarkTrackedPathAsConflict(projectRoot, envFilePath, envContent, decryptedContent);
+          if (markedAsConflict) {
+            console.warn('Git index conflict state was updated for this file.');
+          }
+
           console.warn(`Conflict markers added to ${envFilePath}. Please resolve manually.\n`);
         }
       }
@@ -69,7 +182,7 @@ export function runSmudge(argv = process.argv.slice(2)) {
     }
   }
 
-  process.stdout.write(ageProcess.stdout);
+  process.stdout.write(outputContent);
 }
 
 if (require.main === module) {
