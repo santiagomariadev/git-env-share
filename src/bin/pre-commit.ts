@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { ENCRYPTION_TRIGGERS } from '../config/defaults';
 import { loadGitEnvShareConfig } from '../config';
-import { getRemoteGitUrl } from '../utils/git';
+import { getGitRoot, getRemoteGitUrl } from '../utils/git';
 import { getEnvFilesAndUpdateGitIgnore, stageEnvSecrets } from '../utils/envWorkflow';
 
 export function shouldRunPreCommitHook(projectRoot = process.cwd()): boolean {
@@ -40,7 +40,7 @@ function verifyGitAccess() {
 
 export function runPreCommit() {
   try {
-    const rootDir = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).stdout.trim();
+    const rootDir = getGitRoot();
 
     if (!shouldRunPreCommitHook(rootDir)) {
       console.log('git-env-share: pre-commit hook skipped because paused or encryptionTrigger is not "commit".');

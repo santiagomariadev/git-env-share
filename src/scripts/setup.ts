@@ -6,6 +6,8 @@ import { ENCRYPTION_KEYS, ENCRYPTION_TRIGGERS } from '../config/defaults';
 import { askBooleanQuestion } from '../utils/askQuestion';
 import { ensureSecureDirectory, ensureSecureFile } from '../utils/files';
 import { getGitHooksDir, getGitRoot } from '../utils/git';
+import { ensureRecipientsFile, readRecipientsFileContent, resolveRecipientsPath } from '../utils/recipientsFile';
+import { normalizeLineEndings } from '../utils/text';
 import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
 import { warnAboutUnsafeRawEnvGitState } from '../utils/envWorkflow';
 import { syncGitHubRecipientsFromConfig } from '../utils/sshEnvEncryption';
@@ -191,12 +193,8 @@ export async function configureManualModeHookState(gitHooksDir: string, dryRun =
   console.log('✓ Removed git-env-share command from existing pre-commit hook for manual mode.');
 }
 
-function normalizeTextFile(content: string): string {
-  return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-}
-
 export function upsertSecretEnvGitAttributeRule(content: string): { content: string; changed: boolean } {
-  const normalized = normalizeTextFile(content || '');
+  const normalized = normalizeLineEndings(content || '');
   const lines = normalized.length > 0 ? normalized.split('\n') : [];
   const hasRule = lines.some((line) => {
     const trimmed = line.trim();
@@ -231,7 +229,8 @@ export function upsertSecretEnvGitAttributeRule(content: string): { content: str
 }
 
 function configureGitAgeScripts(rootDir: string, dryRun = false) {
-  const recipientsPath = path.join(rootDir, '.agerecipients');
+  const config = loadGitEnvShareConfig(rootDir);
+  const recipientsPath = resolveRecipientsPath(rootDir, config);
   const attributesPath = path.join(rootDir, '.gitattributes');
 
   if (dryRun) {
@@ -249,7 +248,7 @@ function configureGitAgeScripts(rootDir: string, dryRun = false) {
   spawnSync('git', ['config', '--local', 'filter.git-age.required', 'true'], { stdio: 'inherit' });
 
   if (!fs.existsSync(recipientsPath)) {
-    fs.writeFileSync(recipientsPath, '# Add age public keys (one per line)\n');
+    ensureRecipientsFile(recipientsPath, '# Add age public keys (one per line)\n');
     console.log('✓ Created .agerecipients file.');
   }
 
@@ -329,9 +328,7 @@ async function generateAgeKeyPair(recipientsPath: string, dryRun = false) {
     const pubKeyOutput = spawnSync('age-keygen', ['-y', keyPath], { encoding: 'utf-8' }).stdout.trim();
     console.log(`\nYour Public Key: ${pubKeyOutput}`);
 
-    const recipientsContent = fs.existsSync(recipientsPath)
-      ? fs.readFileSync(recipientsPath, 'utf-8')
-      : '';
+    const recipientsContent = readRecipientsFileContent(recipientsPath);
 
     if (!recipientsContent.includes(pubKeyOutput)) {
       const shouldAdd = await askBooleanQuestion('Add this public key to .agerecipients so the repo can encrypt files for you?');

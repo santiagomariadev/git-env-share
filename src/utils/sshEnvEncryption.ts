@@ -3,6 +3,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
+import { readRecipientsFileContent, resolveRecipientsPath } from './recipientsFile';
+import { splitTrimmedNonEmptyLines } from './text';
 
 export function isSshPublicKey(value: string | undefined | null): boolean {
   const normalized = String(value || '').trim();
@@ -23,7 +25,7 @@ export function addSshRecipient(publicKey: string, options: { recipientsPath?: s
   }
 
   const recipientsPath = options.recipientsPath || path.join(process.cwd(), '.agerecipients');
-  const existingContent = fs.existsSync(recipientsPath) ? fs.readFileSync(recipientsPath, 'utf-8') : '';
+  const existingContent = readRecipientsFileContent(recipientsPath);
 
   if (existingContent.includes(normalizedKey)) {
     return [];
@@ -122,7 +124,7 @@ export function fetchGitHubPublicKeys(username: string, options: { baseUrl?: str
           return;
         }
 
-        const keys = data.trim().split(/\r?\n/).filter(Boolean);
+        const keys = splitTrimmedNonEmptyLines(data);
         if (!keys.length) {
           reject(new Error(`No SSH keys found for GitHub user "${normalizedUsername}".`));
           return;
@@ -140,7 +142,7 @@ export function fetchGitHubPublicKeys(username: string, options: { baseUrl?: str
 
 export async function syncGitHubRecipientsFromConfig(projectRoot = process.cwd(), options: { baseUrl?: string } = {}): Promise<string[]> {
   const config = loadGitEnvShareConfig(projectRoot);
-  const recipientsPath = path.join(projectRoot, config.recipientsFile || '.agerecipients');
+  const recipientsPath = resolveRecipientsPath(projectRoot, config);
   const usernames = Array.isArray(config.githubUsernames) ? config.githubUsernames : [];
   const allKeys: string[] = [];
 
@@ -170,7 +172,7 @@ export async function addGitHubUser(username: string, options: { recipientsPath?
   }
 
   const keys = await fetchGitHubPublicKeys(normalizedUsername, { baseUrl: options.baseUrl });
-  const existingContent = fs.existsSync(recipientsPath) ? fs.readFileSync(recipientsPath, 'utf-8') : '';
+  const existingContent = readRecipientsFileContent(recipientsPath);
   const appended = keys.filter((key) => !existingContent.includes(key));
 
   if (appended.length > 0) {

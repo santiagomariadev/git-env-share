@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-import { execSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as readline from 'node:readline';
 import { askBooleanQuestion } from '../utils/askQuestion';
 import { loadGitEnvShareConfig } from '../config';
 import { listRootEnvFiles } from '../utils/files';
+import { getGitRoot } from '../utils/git';
+import { readRecipientsFileContent, resolveRecipientsPath } from '../utils/recipientsFile';
 import { addGitHubUser } from '../utils/sshEnvEncryption';
 
 function readPublicKeyFromStdIn(query: string): Promise<string> {
@@ -20,9 +22,9 @@ function readPublicKeyFromStdIn(query: string): Promise<string> {
 
 export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
   try {
-    const rootDir = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).stdout.trim();
+    const rootDir = getGitRoot();
     const config = loadGitEnvShareConfig(rootDir);
-    const recipientsPath = path.join(rootDir, config.recipientsFile || '.agerecipients');
+    const recipientsPath = resolveRecipientsPath(rootDir, config);
 
     let pubKey = argv[0];
     const isSshMode = config.encryptionKey === 'ssh';
@@ -53,9 +55,7 @@ export async function runAddKeyAndReencrypt(argv = process.argv.slice(2)) {
       process.exit(1);
     }
 
-    const recipientsContent = fs.existsSync(recipientsPath)
-      ? fs.readFileSync(recipientsPath, 'utf-8')
-      : '';
+    const recipientsContent = readRecipientsFileContent(recipientsPath);
 
     if (recipientsContent.includes(pubKey)) {
       console.log('𝑖 Public key is already present in .agerecipients.');

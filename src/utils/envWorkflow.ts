@@ -4,6 +4,8 @@ import * as path from 'node:path';
 import { ENCRYPTION_TRIGGERS } from '../config/defaults';
 import { loadGitEnvShareConfig } from '../config';
 import { listRootEnvFiles } from './files';
+import { ensureRecipientsFile, resolveRecipientsPath } from './recipientsFile';
+import { normalizeLineEndings } from './text';
 import { execGit, getGitRoot, gitAdd, gitResetPaths, gitRestoreStaged } from './git';
 
 export type EnvMigrationSafetyState = {
@@ -23,10 +25,10 @@ export function ensureManualMode(rootDir: string): void {
 
 export function validateRecipients(rootDir: string): string {
   const config = loadGitEnvShareConfig(rootDir);
-  const recipientsPath = path.join(rootDir, config.recipientsFile || '.agerecipients');
+  const recipientsPath = resolveRecipientsPath(rootDir, config);
 
   if (!fs.existsSync(recipientsPath)) {
-    fs.writeFileSync(recipientsPath, '# Add age or SSH public keys (one per line)\n');
+    ensureRecipientsFile(recipientsPath, '# Add age or SSH public keys (one per line)\n');
     console.log('✓ Created recipients file for the configured encryption key:', config.encryptionKey);
   }
 
@@ -57,12 +59,8 @@ export function getEnvFilesAndUpdateGitIgnore(rootDir = process.cwd()): string[]
   return envFiles;
 }
 
-function normalizeTextFile(content: string): string {
-  return content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-}
-
 export function upsertGitIgnoreEnvEntries(content: string, envFiles: string[]): { content: string; changed: boolean } {
-  const normalized = normalizeTextFile(content || '');
+  const normalized = normalizeLineEndings(content || '');
   const lines = normalized.length > 0 ? normalized.split('\n') : [];
   const normalizedLines = lines.map((line) => line.trim());
   const lineSet = new Set(normalizedLines);

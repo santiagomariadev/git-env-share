@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
-import * as path from 'node:path';
 import { loadGitEnvShareConfig } from '../config';
+import { getGitRoot } from '../utils/git';
+import { resolveRecipientsPath } from '../utils/recipientsFile';
 import { addSshRecipient } from '../utils/sshEnvEncryption';
 
 export async function runAddSshKey(argv = process.argv.slice(2)) {
-  const rootDir = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8' }).stdout.trim();
+  const rootDir = getGitRoot();
   const config = loadGitEnvShareConfig(rootDir);
-  const recipientsPath = path.join(rootDir, config.recipientsFile || '.agerecipients');
+  const recipientsPath = resolveRecipientsPath(rootDir, config);
   const rawKey = argv[0];
 
   if (!rawKey) {
