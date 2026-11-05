@@ -8,6 +8,7 @@ import { runAddKeyAndReencrypt } from './add-key';
 import { runAddSshKey } from './add-ssh-key';
 import { runAddGitHubUser } from './add-github-user';
 import { runClean } from './clean';
+import { runCompareIncoming } from './compare-incoming';
 import { runPreCommit } from './pre-commit';
 import { runRestoreEnv } from './restore-env';
 import { runSmudge } from './smudge';
@@ -32,6 +33,7 @@ function printHelp() {
   );
   console.log('  add-ssh-key <key>     Add a raw SSH public key recipient');
   console.log('  add-github-user <u>   Fetch and add SSH keys for a GitHub username');
+  console.log('  compare-incoming      Show color diff between local .env* and .incoming files');
   console.log(
     '  verify                Verify tracked .secret.env* files are encrypted and raw .env* files are untracked',
   );
@@ -81,6 +83,9 @@ async function main() {
       return;
     case 'verify':
       runVerify();
+      return;
+    case 'compare-incoming':
+      runCompareIncoming(args);
       return;
     case 'clean':
       runClean(args);

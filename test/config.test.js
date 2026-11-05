@@ -20,6 +20,11 @@ const {
 const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncryption');
 const { shouldSkipRemoteValidation } = require('../dist/utils/git');
 const { shouldRunPreCommitHook } = require('../dist/bin/pre-commit');
+const {
+  inferEnvFilePathFromIncoming,
+  inferIncomingFilePath,
+  listIncomingPairs,
+} = require('../dist/bin/compare-incoming');
 const { collectVerifyIssues } = require('../dist/bin/verify');
 const { isAgeCiphertext } = require('../dist/utils/ageCiphertext');
 const { containsConflictMarkers, upsertGitIgnoreEnvEntries } = require('../dist/utils/envWorkflow');
@@ -497,6 +502,36 @@ test('containsConflictMarkers detects and rejects merge-marker payloads', () => 
     true,
   );
   assert.equal(containsConflictMarkers(Buffer.from('FOO=1\n=======\nBAR=2\n')), true);
+});
+
+test('compare-incoming path helpers derive env/incoming filenames correctly', () => {
+  assert.equal(inferIncomingFilePath('.env'), '.env.incoming');
+  assert.equal(inferIncomingFilePath('/tmp/.env.local'), '/tmp/.env.local.incoming');
+
+  assert.equal(inferEnvFilePathFromIncoming('.env.incoming'), '.env');
+  assert.equal(inferEnvFilePathFromIncoming('/tmp/.env.local.incoming'), '/tmp/.env.local');
+  assert.equal(inferEnvFilePathFromIncoming('.env'), null);
+});
+
+test('listIncomingPairs discovers incoming files in project root', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-incoming-pairs-'));
+
+  fs.writeFileSync(path.join(dir, '.env.incoming'), 'A=1\n');
+  fs.writeFileSync(path.join(dir, '.env.local.incoming'), 'A=2\n');
+  fs.writeFileSync(path.join(dir, '.env'), 'A=0\n');
+  fs.writeFileSync(path.join(dir, 'README.md'), 'not an env incoming file\n');
+
+  const pairs = listIncomingPairs(dir);
+  assert.deepEqual(pairs, [
+    {
+      envFilePath: path.join(dir, '.env'),
+      incomingFilePath: path.join(dir, '.env.incoming'),
+    },
+    {
+      envFilePath: path.join(dir, '.env.local'),
+      incomingFilePath: path.join(dir, '.env.local.incoming'),
+    },
+  ]);
 });
 
 const integrationTest = runIntegrationTests ? test : test.skip;

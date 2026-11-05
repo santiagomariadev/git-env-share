@@ -115,6 +115,7 @@ npx ges generate-key
 npx ges add-key age1...
 npx ges add-ssh-key "ssh-ed25519 AAAA..."
 npx ges add-github-user octocat
+npx ges compare-incoming
 npx ges verify
 ```
 
@@ -128,7 +129,26 @@ Notes:
 - `ges add-key` is for adding an Age public key.
 - `ges add-github-user` is for SSH mode recipients.
 - `ges add-ssh-key` adds a raw SSH public key directly.
+- `ges compare-incoming` shows a colorized diff between local `.env*` files and matching `.incoming` files.
 - `ges verify` is intended for pre-push hooks and CI and fails if `.secret.env*` files are not age ciphertext or if raw `.env*` files are tracked.
+
+## Reviewing incoming env changes
+
+When a pull/check out detects that incoming decrypted values differ from your local `.env*`, git-env-share keeps your local file unchanged and writes an adjacent `.incoming` file (for example `.env.incoming`).
+
+The smudge workflow automatically prints a colorized diff right after creating `.incoming`.
+
+You can re-run comparisons anytime with:
+
+```bash
+# compare all .incoming files in the repository root
+npx ges compare-incoming
+
+# compare a specific pair
+npx ges compare-incoming .env
+# or
+npx ges compare-incoming .env.incoming
+```
 
 ## Init arguments
 

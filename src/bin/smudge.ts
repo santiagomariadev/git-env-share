@@ -2,6 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { compareIncomingPair } from './compare-incoming';
 import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
 import { writeFileAtomic } from '../utils/files';
 
@@ -62,6 +63,8 @@ export function runSmudge(argv = process.argv.slice(2)) {
           const incomingFilePath = `${envFilePath}.incoming`;
           writeFileAtomic(incomingFilePath, decryptedContent);
           info(`Wrote incoming decrypted file to ${incomingFilePath}.`);
+          info('Diff between local and incoming values:');
+          compareIncomingPair(envFilePath, incomingFilePath);
           info(`Kept existing ${envFilePath} unchanged. Resolve manually and re-run encryption.`);
         }
       }
