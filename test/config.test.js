@@ -419,7 +419,7 @@ test('upsertSecretEnvGitAttributeRule appends canonical rule once and is idempot
 
   assert.equal(first.changed, true);
   assert.match(first.content, /# Encrypt environment files with git-env-share/);
-  assert.match(first.content, /\.secret\.env\*\s+filter=git-age/);
+  assert.match(first.content, /\.secret\.env\*\s+-text\s+filter=git-age/);
   assert.equal(second.changed, false);
 
   const ruleCount = first.content
@@ -429,7 +429,7 @@ test('upsertSecretEnvGitAttributeRule appends canonical rule once and is idempot
 });
 
 test('upsertSecretEnvGitAttributeRule treats existing compatible rule as already present', () => {
-  const original = '# existing\n.secret.env* text eol=lf filter=git-age\n';
+  const original = '# existing\n.secret.env* eol=lf -text filter=git-age\n';
   const result = upsertSecretEnvGitAttributeRule(original);
 
   assert.equal(result.changed, true);

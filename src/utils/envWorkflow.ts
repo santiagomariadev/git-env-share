@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { ENCRYPTION_TRIGGERS } from '../config/defaults';
-import { loadGitEnvShareConfig } from '../config';
+import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
 import { listRootEnvFiles, writeFileAtomic } from './files';
 import { ensureRecipientsFile, resolveRecipientsPath } from './recipientsFile';
 import { normalizeLineEndings } from './text';
@@ -169,11 +169,34 @@ export function warnAboutUnsafeRawEnvGitState(rootDir = getGitRoot()): EnvMigrat
   return state;
 }
 
-export function secureEnvFile(rootDir: string, envFilePath: string, recipientsPath: string): void {
+function tryDecryptSecretFile(secretFilePath: string, keyPath: string | null): Buffer | null {
+  if (!keyPath || !fs.existsSync(keyPath) || !fs.existsSync(secretFilePath)) {
+    return null;
+  }
+
+  const encryptedContent = fs.readFileSync(secretFilePath);
+  const ageProcess = spawnSync('age', ['-d', '-i', keyPath], {
+    input: encryptedContent,
+    maxBuffer: 1024 * 1024 * 50,
+  });
+
+  if (ageProcess.status !== 0) {
+    return null;
+  }
+
+  return ageProcess.stdout as Buffer;
+}
+
+export function secureEnvFile(
+  rootDir: string,
+  envFilePath: string,
+  recipientsPath: string,
+  keyPath: string | null,
+): boolean {
   const fullPath = path.join(rootDir, envFilePath);
 
   if (!fs.existsSync(fullPath)) {
-    return;
+    return false;
   }
 
   const dir = path.dirname(fullPath);
@@ -189,7 +212,19 @@ export function secureEnvFile(rootDir: string, envFilePath: string, recipientsPa
   }
 
   const envContent = fs.readFileSync(fullPath);
-  const ageProcess = spawnSync('age', ['-R', recipientsPath, '-e'], {
+
+  if (secretExists) {
+    const existingDecrypted = tryDecryptSecretFile(secretFilePath, keyPath);
+    if (existingDecrypted && existingDecrypted.equals(envContent)) {
+      gitRestoreStaged(envFilePath);
+      console.log(`✓ Unstaged raw file: ${envFilePath}`);
+      gitAdd(relativeSecretPath, '.gitignore');
+      console.log(`✓ No plaintext changes for ${relativeSecretPath}; skipped re-encryption.`);
+      return false;
+    }
+  }
+
+  const ageProcess = spawnSync('age', ['-a', '-R', recipientsPath, '-e'], {
     input: envContent,
     maxBuffer: 1024 * 1024 * 50,
   });
@@ -204,6 +239,7 @@ export function secureEnvFile(rootDir: string, envFilePath: string, recipientsPa
   console.log(`✓ Unstaged raw file: ${envFilePath}`);
   gitAdd(relativeSecretPath, '.gitignore');
   console.log(`✓ Encrypted & Staged: ${relativeSecretPath}`);
+  return true;
 }
 
 export function stageEnvSecrets(rootDir = getGitRoot()): {
@@ -216,12 +252,16 @@ export function stageEnvSecrets(rootDir = getGitRoot()): {
   warnAboutUnsafeRawEnvGitState(rootDir);
 
   const recipientsPath = validateRecipients(rootDir);
+  const config = loadGitEnvShareConfig(rootDir);
+  const keyPath = resolvePrivateKeyPath(config, rootDir);
   const envFiles = getEnvFilesAndUpdateGitIgnore(rootDir);
 
   let encryptedCount = 0;
   for (const relativePath of envFiles) {
-    secureEnvFile(rootDir, relativePath, recipientsPath);
-    encryptedCount++;
+    const didEncrypt = secureEnvFile(rootDir, relativePath, recipientsPath, keyPath);
+    if (didEncrypt) {
+      encryptedCount++;
+    }
   }
 
   return { envFiles, encryptedCount, recipientsPath };

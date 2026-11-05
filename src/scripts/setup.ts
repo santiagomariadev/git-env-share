@@ -21,7 +21,7 @@ export interface SetupOptions {
   encryptionTrigger?: 'manual' | 'commit' | string;
 }
 
-const SECRET_ENV_RULE = '.secret.env* filter=git-age';
+const SECRET_ENV_RULE = '.secret.env* -text filter=git-age';
 const ATTRIBUTES_COMMENT = '# Encrypt environment files with git-env-share';
 const PRECOMMIT_COMMAND = 'npx ges precommit';
 const PREPUSH_COMMAND = 'npx ges verify';
@@ -286,22 +286,38 @@ export function upsertSecretEnvGitAttributeRule(content: string): {
 } {
   const normalized = normalizeLineEndings(content || '');
   const lines = normalized.length > 0 ? normalized.split('\n') : [];
-  const hasRule = lines.some((line) => {
+  let hasCanonicalRule = false;
+  let changed = false;
+
+  const filteredLines = lines.filter((line) => {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) return false;
+    if (!trimmed || trimmed.startsWith('#')) return true;
 
     const tokens = trimmed.split(/\s+/).filter(Boolean);
-    if (tokens.length === 0 || tokens[0] !== '.secret.env*') return false;
+    if (tokens.length === 0 || tokens[0] !== '.secret.env*') return true;
 
-    return tokens.some((token) => token === 'filter=git-age');
+    const hasFilter = tokens.includes('filter=git-age');
+    const hasTextDisabled = tokens.includes('-text');
+    const isCanonical = hasFilter && hasTextDisabled && trimmed === SECRET_ENV_RULE;
+
+    if (isCanonical) {
+      hasCanonicalRule = true;
+      return true;
+    }
+
+    changed = true;
+    return false;
   });
-  const hasComment = lines.some((line) => line.trim() === ATTRIBUTES_COMMENT);
 
-  if (hasRule && hasComment) {
+  const hasComment = filteredLines.some((line) => line.trim() === ATTRIBUTES_COMMENT);
+
+  if (hasCanonicalRule && hasComment && !changed) {
     return { content: normalized.endsWith('\n') ? normalized : `${normalized}\n`, changed: false };
   }
 
-  const outputLines = [...lines.filter((line) => line.length > 0 || lines.length === 0)];
+  const outputLines = [
+    ...filteredLines.filter((line) => line.length > 0 || filteredLines.length === 0),
+  ];
   if (outputLines.length > 0 && outputLines[outputLines.length - 1].trim() !== '') {
     outputLines.push('');
   }
@@ -310,12 +326,17 @@ export function upsertSecretEnvGitAttributeRule(content: string): {
     outputLines.push(ATTRIBUTES_COMMENT);
   }
 
-  if (!hasRule) {
+  if (!hasCanonicalRule) {
     outputLines.push(SECRET_ENV_RULE);
+    changed = true;
+  }
+
+  if (!hasComment) {
+    changed = true;
   }
 
   const updated = `${outputLines.join('\n')}\n`;
-  return { content: updated, changed: true };
+  return { content: updated, changed };
 }
 
 function configureGitAgeScripts(rootDir: string, dryRun = false) {
