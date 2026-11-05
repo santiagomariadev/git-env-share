@@ -122,6 +122,11 @@ function collectRawEnvFiles(paths: string[]): string[] {
     .sort((left, right) => left.localeCompare(right));
 }
 
+export function containsConflictMarkers(content: Buffer | string): boolean {
+  const text = typeof content === 'string' ? content : content.toString('utf-8');
+  return text.includes('<<<<<<<') || text.includes('=======') || text.includes('>>>>>>>');
+}
+
 export function getEnvMigrationSafetyState(_rootDir = getGitRoot()): EnvMigrationSafetyState {
   const stagedPaths = collectRawEnvFiles(
     parseGitPathList(execGit(['diff', '--cached', '--name-only'])),
@@ -212,6 +217,12 @@ export function secureEnvFile(
   }
 
   const envContent = fs.readFileSync(fullPath);
+
+  if (containsConflictMarkers(envContent)) {
+    throw new Error(
+      `Refusing to encrypt ${envFilePath} because it contains merge conflict markers. Resolve the file before running git-env-share.`,
+    );
+  }
 
   if (secretExists) {
     const existingDecrypted = tryDecryptSecretFile(secretFilePath, keyPath);

@@ -20,10 +20,9 @@ const {
 const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncryption');
 const { shouldSkipRemoteValidation } = require('../dist/utils/git');
 const { shouldRunPreCommitHook } = require('../dist/bin/pre-commit');
-const { tryMarkTrackedPathAsConflict } = require('../dist/bin/smudge');
 const { collectVerifyIssues } = require('../dist/bin/verify');
 const { isAgeCiphertext } = require('../dist/utils/ageCiphertext');
-const { upsertGitIgnoreEnvEntries } = require('../dist/utils/envWorkflow');
+const { containsConflictMarkers, upsertGitIgnoreEnvEntries } = require('../dist/utils/envWorkflow');
 const askQuestionModule = require('../dist/utils/askQuestion');
 
 const runIntegrationTests = process.env.GIT_ENV_SHARE_RUN_INTEGRATION === '1';
@@ -491,83 +490,13 @@ test('collectVerifyIssues reports tracked raw env files and non-ciphertext secre
   }
 });
 
-test('tryMarkTrackedPathAsConflict marks tracked file as unmerged during merge-like state', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-smudge-conflict-track-'));
-
-  runGit(['init', '-b', 'main'], dir);
-  runGit(['config', 'user.name', 'Test User'], dir);
-  runGit(['config', 'user.email', 'test@example.com'], dir);
-
-  fs.writeFileSync(path.join(dir, '.env'), 'HELLO=old\n');
-  runGit(['add', '-f', '.env'], dir);
-  runGit(['commit', '-m', 'add env'], dir);
-
-  const gitDir = runGit(['rev-parse', '--git-dir'], dir).trim();
-  const resolvedGitDir = path.isAbsolute(gitDir) ? gitDir : path.join(dir, gitDir);
-  fs.writeFileSync(path.join(resolvedGitDir, 'MERGE_HEAD'), 'deadbeef\n');
-
-  const result = tryMarkTrackedPathAsConflict(
-    dir,
-    path.join(dir, '.env'),
-    Buffer.from('HELLO=local\n'),
-    Buffer.from('HELLO=remote\n'),
+test('containsConflictMarkers detects and rejects merge-marker payloads', () => {
+  assert.equal(containsConflictMarkers('KEY=value\n'), false);
+  assert.equal(
+    containsConflictMarkers('<<<<<<< ours\nKEY=a\n=======\nKEY=b\n>>>>>>> theirs\n'),
+    true,
   );
-
-  assert.equal(result, true);
-
-  const unmerged = runGit(['ls-files', '-u', '--', '.env'], dir).split(/\r?\n/).filter(Boolean);
-
-  assert.equal(unmerged.length, 3);
-});
-
-test('tryMarkTrackedPathAsConflict returns false when merge-like state is not active', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-smudge-conflict-no-merge-'));
-
-  runGit(['init', '-b', 'main'], dir);
-  runGit(['config', 'user.name', 'Test User'], dir);
-  runGit(['config', 'user.email', 'test@example.com'], dir);
-
-  fs.writeFileSync(path.join(dir, '.env'), 'HELLO=old\n');
-  runGit(['add', '-f', '.env'], dir);
-  runGit(['commit', '-m', 'add env'], dir);
-
-  const result = tryMarkTrackedPathAsConflict(
-    dir,
-    path.join(dir, '.env'),
-    Buffer.from('HELLO=local\n'),
-    Buffer.from('HELLO=remote\n'),
-  );
-
-  assert.equal(result, false);
-
-  const unmerged = runGit(['ls-files', '-u', '--', '.env'], dir).trim();
-  assert.equal(unmerged, '');
-});
-
-test('tryMarkTrackedPathAsConflict returns false for untracked files', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-smudge-conflict-untracked-'));
-
-  runGit(['init', '-b', 'main'], dir);
-  runGit(['config', 'user.name', 'Test User'], dir);
-  runGit(['config', 'user.email', 'test@example.com'], dir);
-
-  const gitDir = runGit(['rev-parse', '--git-dir'], dir).trim();
-  const resolvedGitDir = path.isAbsolute(gitDir) ? gitDir : path.join(dir, gitDir);
-  fs.writeFileSync(path.join(resolvedGitDir, 'MERGE_HEAD'), 'deadbeef\n');
-
-  fs.writeFileSync(path.join(dir, '.env'), 'HELLO=local\n');
-
-  const result = tryMarkTrackedPathAsConflict(
-    dir,
-    path.join(dir, '.env'),
-    Buffer.from('HELLO=local\n'),
-    Buffer.from('HELLO=remote\n'),
-  );
-
-  assert.equal(result, false);
-
-  const unmerged = runGit(['ls-files', '-u', '--', '.env'], dir).trim();
-  assert.equal(unmerged, '');
+  assert.equal(containsConflictMarkers(Buffer.from('FOO=1\n=======\nBAR=2\n')), true);
 });
 
 const integrationTest = runIntegrationTests ? test : test.skip;
