@@ -25,6 +25,7 @@
     "prepack": "npm run build",
     "test": "npm run build && node --test test/*.test.js",
     "test:ci": "GIT_ENV_SHARE_RUN_INTEGRATION=1 npm test",
+    "verify:secrets": "npx ges verify",
     "ci": "npm run check && npm test"
   },
   "repository": {

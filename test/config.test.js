@@ -21,6 +21,8 @@ const { syncGitHubRecipientsFromConfig } = require('../dist/utils/sshEnvEncrypti
 const { shouldSkipRemoteValidation } = require('../dist/utils/git');
 const { shouldRunPreCommitHook } = require('../dist/bin/pre-commit');
 const { tryMarkTrackedPathAsConflict } = require('../dist/bin/smudge');
+const { collectVerifyIssues } = require('../dist/bin/verify');
+const { isAgeCiphertext } = require('../dist/utils/ageCiphertext');
 const { upsertGitIgnoreEnvEntries } = require('../dist/utils/envWorkflow');
 const askQuestionModule = require('../dist/utils/askQuestion');
 
@@ -457,6 +459,36 @@ test('upsertGitIgnoreEnvEntries handles regex-like names safely and avoids dupli
 
   assert.equal(envTestCount, 1);
   assert.ok(lines.includes('.env[qa]'));
+});
+
+test('isAgeCiphertext accepts both age ciphertext headers and rejects plaintext', () => {
+  assert.equal(isAgeCiphertext(Buffer.from('age-encryption.org/v1\nexample\n')), true);
+  assert.equal(isAgeCiphertext(Buffer.from('-----BEGIN AGE ENCRYPTED FILE-----\nexample\n')), true);
+  assert.equal(isAgeCiphertext(Buffer.from('API_KEY=plaintext\n')), false);
+  assert.equal(isAgeCiphertext(Buffer.from('')), false);
+});
+
+test('collectVerifyIssues reports tracked raw env files and non-ciphertext secret files', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ges-verify-issues-'));
+  const previousCwd = process.cwd();
+
+  runGit(['init', '-b', 'main'], dir);
+  runGit(['config', 'user.name', 'Test User'], dir);
+  runGit(['config', 'user.email', 'test@example.com'], dir);
+
+  fs.writeFileSync(path.join(dir, '.env'), 'API_KEY=plaintext\n');
+  fs.writeFileSync(path.join(dir, '.secret.env'), 'NOT_AGE_HEADER\n');
+  runGit(['add', '.env', '.secret.env'], dir);
+  runGit(['commit', '-m', 'add env files'], dir);
+
+  process.chdir(dir);
+  try {
+    const issues = collectVerifyIssues(dir);
+    assert.deepEqual(issues.trackedRawEnvFiles, ['.env']);
+    assert.deepEqual(issues.nonCiphertextSecretFiles, ['.secret.env']);
+  } finally {
+    process.chdir(previousCwd);
+  }
 });
 
 test('tryMarkTrackedPathAsConflict marks tracked file as unmerged during merge-like state', () => {

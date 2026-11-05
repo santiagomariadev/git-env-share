@@ -7,7 +7,7 @@ It encrypts sensitive `.env` files with `age`, keeps raw values out of the repo,
 
 - Keeps `.env` values out of Git by default
 - Encrypts files automatically before commit by default, with optional manual commands
-- Restores decrypted local files on checkout, pull, and clone
+- Keeps tracked `.secret.env*` files encrypted in the working tree and restores local `.env*` files via Git hooks
 - Works with either `age` keys or SSH recipient authorizations
 - Exposes a small typed API for config-aware tooling
 
@@ -97,7 +97,7 @@ Every team member should have the `age` CLI installed locally:
 2. Run `npx ges init` in the project root.
 3. Share the generated public key or GitHub username with the repo admin.
 4. Commit and push the encrypted `.secret.*` artifacts as normal.
-5. New team members pull the repo and the smudge filter restores their local `.env` files automatically.
+5. New team members pull the repo and post-checkout/post-merge hooks restore their local `.env` files automatically.
 
 ## Common commands
 
@@ -115,6 +115,7 @@ npx ges generate-key
 npx ges add-key age1...
 npx ges add-ssh-key "ssh-ed25519 AAAA..."
 npx ges add-github-user octocat
+npx ges verify
 ```
 
 Notes:
@@ -127,6 +128,7 @@ Notes:
 - `ges add-key` is for adding an Age public key.
 - `ges add-github-user` is for SSH mode recipients.
 - `ges add-ssh-key` adds a raw SSH public key directly.
+- `ges verify` is intended for pre-push hooks and CI and fails if `.secret.env*` files are not age ciphertext or if raw `.env*` files are tracked.
 
 ## Init arguments
 
@@ -170,7 +172,7 @@ git push
 
 ### 3) New member pulls access
 
-The smudge filter decrypts `.secret.env*` files and recreates the local `.env` file automatically:
+Post-checkout and post-merge hooks decrypt `.secret.env*` files and recreate the local `.env` file automatically:
 
 ```bash
 git pull
@@ -203,7 +205,7 @@ git push
 
 ### 3) New member pulls access
 
-The smudge filter decrypts `.secret.env*` files and recreates the local `.env` file automatically:
+Post-checkout and post-merge hooks decrypt `.secret.env*` files and recreate the local `.env` file automatically:
 
 ```bash
 git pull

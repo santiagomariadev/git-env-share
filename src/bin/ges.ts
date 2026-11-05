@@ -7,8 +7,11 @@ import { runGenerateKey } from './generate-key';
 import { runAddKeyAndReencrypt } from './add-key';
 import { runAddSshKey } from './add-ssh-key';
 import { runAddGitHubUser } from './add-github-user';
+import { runClean } from './clean';
 import { runPreCommit } from './pre-commit';
+import { runRestoreEnv } from './restore-env';
 import { runSmudge } from './smudge';
+import { runVerify } from './verify';
 
 function printHelp() {
   console.log('ges - git env share');
@@ -29,9 +32,14 @@ function printHelp() {
   );
   console.log('  add-ssh-key <key>     Add a raw SSH public key recipient');
   console.log('  add-github-user <u>   Fetch and add SSH keys for a GitHub username');
+  console.log(
+    '  verify                Verify tracked .secret.env* files are encrypted and raw .env* files are untracked',
+  );
   console.log('');
   console.log('Internal commands:');
+  console.log('  clean <path>          Reject plaintext input in the Git clean filter');
   console.log('  precommit             Run pre-commit encryption hook logic');
+  console.log('  restore-env           Restore local .env files from tracked ciphertext');
   console.log('  smudge <path>         Decrypt file content from Git smudge filter');
 }
 
@@ -71,8 +79,17 @@ async function main() {
     case 'add-github-user':
       await runAddGitHubUser(args);
       return;
+    case 'verify':
+      runVerify();
+      return;
+    case 'clean':
+      runClean(args);
+      return;
     case 'precommit':
       runPreCommit();
+      return;
+    case 'restore-env':
+      runRestoreEnv(args);
       return;
     case 'smudge':
       runSmudge(args);

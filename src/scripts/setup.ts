@@ -23,6 +23,9 @@ export interface SetupOptions {
 
 const SECRET_ENV_RULE = '.secret.env* filter=git-age';
 const ATTRIBUTES_COMMENT = '# Encrypt environment files with git-env-share';
+const PRECOMMIT_COMMAND = 'npx ges precommit';
+const PREPUSH_COMMAND = 'npx ges verify';
+const RESTORE_ENV_COMMAND = 'npx ges restore-env';
 
 export function parseSetupOptions(argv: string[] = process.argv.slice(2)): SetupOptions {
   const result: SetupOptions = { dryRun: false };
@@ -85,7 +88,7 @@ async function confirmSetup(dryRun = false) {
   }
 
   console.log(
-    'This will configure the Git filter, update .agerecipients and .gitattributes, and optionally install a pre-commit hook.',
+    'This will configure the Git filter, update .agerecipients and .gitattributes, and install git-env-share hooks.',
   );
 
   const answer = await askBooleanQuestion('Do you want to continue with the setup?');
@@ -95,56 +98,102 @@ async function confirmSetup(dryRun = false) {
   }
 }
 
-async function configureGitHooks(gitHooksDir: string, dryRun = false) {
-  const precommitHookPath = path.join(gitHooksDir, 'pre-commit');
-  const hookCommand = 'npx ges precommit';
-  const hookScriptHeader = '#!/bin/sh\n# git-env-share pre-commit hook\n';
+async function ensureHookContainsCommand(
+  gitHooksDir: string,
+  hookName: string,
+  hookCommand: string,
+  hookDescription: string,
+  dryRun = false,
+) {
+  const hookPath = path.join(gitHooksDir, hookName);
+  const hookScriptHeader = `#!/bin/sh\n# git-env-share ${hookName} hook\n`;
 
   if (dryRun) {
-    if (!fs.existsSync(precommitHookPath)) {
+    if (!fs.existsSync(hookPath)) {
       console.log(
-        `Preview: would create pre-commit hook at ${precommitHookPath} with:\n${hookScriptHeader}${hookCommand}\n`,
+        `Preview: would create ${hookName} hook at ${hookPath} with:\n${hookScriptHeader}${hookCommand}\n`,
       );
       return;
     }
 
-    const existingContent = fs.readFileSync(precommitHookPath, 'utf-8');
+    const existingContent = fs.readFileSync(hookPath, 'utf-8');
     if (existingContent.includes(hookCommand)) {
       console.log(
-        `Preview: git-env-share hook already present in ${precommitHookPath}; no change required.`,
+        `Preview: git-env-share command already present in ${hookPath}; no change required.`,
       );
       return;
     }
 
-    console.log(`Preview: would append git-env-share to ${precommitHookPath}:\n${hookCommand}\n`);
+    console.log(`Preview: would append git-env-share to ${hookPath}:\n${hookCommand}\n`);
     return;
   }
 
-  if (!fs.existsSync(precommitHookPath)) {
-    fs.writeFileSync(precommitHookPath, `${hookScriptHeader}\n${hookCommand}\n`, { mode: 0o755 });
-    console.log('✓ Created pre-commit hook at', precommitHookPath);
+  if (!fs.existsSync(hookPath)) {
+    fs.writeFileSync(hookPath, `${hookScriptHeader}\n${hookCommand}\n`, { mode: 0o755 });
+    console.log(`✓ Created ${hookName} hook at ${hookPath}`);
     return;
   }
 
-  const existingContent = fs.readFileSync(precommitHookPath, 'utf-8');
+  const existingContent = fs.readFileSync(hookPath, 'utf-8');
   if (existingContent.includes(hookCommand)) {
-    console.log('✓ git-env-share hook already present in pre-commit');
+    console.log(`✓ git-env-share command already present in ${hookName}`);
     return;
   }
 
-  console.log('⚠ A pre-commit hook already exists in this repository.');
+  console.log(`⚠ A ${hookName} hook already exists in this repository.`);
   const answer = await askBooleanQuestion(
-    'Append git-env-share to the existing hook and keep the current hook behavior?',
+    `Append git-env-share ${hookDescription} to the existing ${hookName} hook and keep current behavior?`,
   );
 
   if (!answer) {
-    console.log('Skipped hook installation to avoid modifying the existing pre-commit hook.');
+    console.log(`Skipped ${hookName} hook installation to avoid modifying the existing hook.`);
     return;
   }
 
   const updatedContent = `${existingContent}\n\n# Added by git-env-share\n${hookCommand}\n`;
-  fs.writeFileSync(precommitHookPath, updatedContent, { mode: 0o755 });
-  console.log('✓ Appended git-env-share pre-commit hook');
+  fs.writeFileSync(hookPath, updatedContent, { mode: 0o755 });
+  console.log(`✓ Appended git-env-share command to ${hookName} hook`);
+}
+
+async function configureGitHooks(gitHooksDir: string, dryRun = false) {
+  await ensureHookContainsCommand(
+    gitHooksDir,
+    'pre-commit',
+    PRECOMMIT_COMMAND,
+    'pre-commit encryption',
+    dryRun,
+  );
+}
+
+async function configureLifecycleHooks(gitHooksDir: string, dryRun = false) {
+  await ensureHookContainsCommand(
+    gitHooksDir,
+    'pre-push',
+    PREPUSH_COMMAND,
+    'pre-push verification',
+    dryRun,
+  );
+  await ensureHookContainsCommand(
+    gitHooksDir,
+    'post-checkout',
+    RESTORE_ENV_COMMAND,
+    'post-checkout restore',
+    dryRun,
+  );
+  await ensureHookContainsCommand(
+    gitHooksDir,
+    'post-merge',
+    RESTORE_ENV_COMMAND,
+    'post-merge restore',
+    dryRun,
+  );
+  await ensureHookContainsCommand(
+    gitHooksDir,
+    'post-rewrite',
+    RESTORE_ENV_COMMAND,
+    'post-rewrite restore',
+    dryRun,
+  );
 }
 
 export function stripGitEnvShareHookLines(content: string): string {
@@ -154,7 +203,7 @@ export function stripGitEnvShareHookLines(content: string): string {
       .filter((line) => {
         const trimmed = line.trim();
         return (
-          trimmed !== 'npx ges precommit' &&
+          trimmed !== PRECOMMIT_COMMAND &&
           trimmed !== '# Added by git-env-share' &&
           trimmed !== '# git-env-share pre-commit hook'
         );
@@ -173,7 +222,7 @@ export function isManagedByGitEnvShareOnly(content: string): boolean {
     .filter(
       (line) =>
         line !== '#!/bin/sh' &&
-        line !== 'npx ges precommit' &&
+        line !== PRECOMMIT_COMMAND &&
         line !== '# Added by git-env-share' &&
         line !== '# git-env-share pre-commit hook',
     );
@@ -189,7 +238,7 @@ export async function configureManualModeHookState(gitHooksDir: string, dryRun =
   }
 
   const existingContent = fs.readFileSync(precommitHookPath, 'utf-8');
-  if (!existingContent.includes('npx ges precommit')) {
+  if (!existingContent.includes(PRECOMMIT_COMMAND)) {
     return;
   }
 
@@ -203,7 +252,7 @@ export async function configureManualModeHookState(gitHooksDir: string, dryRun =
     }
 
     console.log(
-      `Preview: would remove "npx ges precommit" from ${precommitHookPath} so manual mode does not run commit-time encryption.`,
+      `Preview: would remove "${PRECOMMIT_COMMAND}" from ${precommitHookPath} so manual mode does not run commit-time encryption.`,
     );
     return;
   }
@@ -215,7 +264,7 @@ export async function configureManualModeHookState(gitHooksDir: string, dryRun =
   }
 
   console.log(
-    '⚠ Manual mode was selected, but an existing pre-commit hook still contains "npx ges precommit".',
+    '⚠ Manual mode was selected, but an existing pre-commit hook still contains git-env-share commit-time encryption.',
   );
   const shouldRemove = await askBooleanQuestion(
     'Remove only the git-env-share line and keep the rest of the hook?',
@@ -276,16 +325,18 @@ function configureGitAgeScripts(rootDir: string, dryRun = false) {
 
   if (dryRun) {
     console.log('Preview: would configure local Git filters:');
-    console.log('  - filter.git-age.clean = cat');
-    console.log('  - filter.git-age.smudge = npx ges smudge %f');
+    console.log('  - filter.git-age.clean = npx ges clean %f');
+    console.log('  - filter.git-age.smudge = cat');
     console.log('  - filter.git-age.required = true');
     console.log(`Preview: would ensure ${recipientsPath} exists and contains age public keys.`);
     console.log(`Preview: would ensure "${SECRET_ENV_RULE}" exists in ${attributesPath}.`);
     return recipientsPath;
   }
 
-  spawnSync('git', ['config', '--local', 'filter.git-age.clean', 'cat'], { stdio: 'inherit' });
-  spawnSync('git', ['config', '--local', 'filter.git-age.smudge', 'npx ges smudge %f'], {
+  spawnSync('git', ['config', '--local', 'filter.git-age.clean', 'npx ges clean %f'], {
+    stdio: 'inherit',
+  });
+  spawnSync('git', ['config', '--local', 'filter.git-age.smudge', 'cat'], {
     stdio: 'inherit',
   });
   spawnSync('git', ['config', '--local', 'filter.git-age.required', 'true'], { stdio: 'inherit' });
@@ -456,6 +507,8 @@ export async function setup(argv: string[] = process.argv.slice(2)) {
     if (effectiveConfig.encryptionTrigger === ENCRYPTION_TRIGGERS.COMMIT) {
       await configureGitHooks(gitHooksDir, options.dryRun);
     }
+
+    await configureLifecycleHooks(gitHooksDir, options.dryRun);
 
     const recipientsPath = configureGitAgeScripts(rootDir, options.dryRun);
 
