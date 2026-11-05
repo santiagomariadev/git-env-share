@@ -5,6 +5,9 @@ import * as path from 'node:path';
 import { loadGitEnvShareConfig, resolvePrivateKeyPath } from '../config';
 import { writeFileAtomic } from '../utils/files';
 
+// In filter context stdout is the file content, so all human-facing output goes to stderr.
+const info = (msg: string) => process.stderr.write(`${msg}\n`);
+
 function getGitRootOrNull(projectRoot: string): string | null {
   const result = spawnSync('git', ['rev-parse', '--show-toplevel'], {
     cwd: projectRoot,
@@ -161,7 +164,7 @@ export function runSmudge(argv = process.argv.slice(2)) {
         });
 
         if (diffProcess.status === 0) {
-          console.log('No differences found.');
+          info('No differences found.');
         } else {
           const conflictContent = Buffer.concat([
             Buffer.from('<<<<<<< LOCAL VERSION\n'),
@@ -188,7 +191,7 @@ export function runSmudge(argv = process.argv.slice(2)) {
       }
     } else {
       writeFileAtomic(envFilePath, decryptedContent);
-      console.log(`✓ Restored local unencrypted file: ${envFilePath}`);
+      info(`✓ Restored local unencrypted file: ${envFilePath}`);
     }
   }
 
